@@ -760,8 +760,15 @@ public sealed class FilePanel : IFilePanel
 
     /// <summary>
     /// Picks the colour for one entry, in the fixed precedence
-    /// cursor &gt; tagged &gt; directory &gt; hidden or system &gt; archive &gt; executable &gt; plain file.
+    /// cursor &gt; tagged &gt; hidden or system &gt; directory &gt; archive &gt; executable &gt; plain file.
     /// </summary>
+    /// <remarks>
+    /// Hidden and system deliberately outrank directory. In Far, <c>$Recycle.Bin</c>,
+    /// <c>ProgramData</c> and <c>System Volume Information</c> are all dim grey even though they are
+    /// folders - the dimming is how the panel says "not your business", and a folder is exactly the
+    /// kind of entry that most needs to recede. Ranking directory first instead made every
+    /// <c>.git</c> and <c>.vs</c> in a source tree shout in bright white.
+    /// </remarks>
     /// <param name="entry">The entry.</param>
     /// <param name="onCursor">Whether the entry is under the cursor of the focused panel.</param>
     /// <returns>The style.</returns>
@@ -779,14 +786,14 @@ public sealed class FilePanel : IFilePanel
             return Theme.PanelSelectedFile;
         }
 
-        if (entry.IsDirectory)
-        {
-            return Theme.PanelDirectory;
-        }
-
         if (entry.IsHidden)
         {
             return Theme.PanelHidden;
+        }
+
+        if (entry.IsDirectory)
+        {
+            return Theme.PanelDirectory;
         }
 
         if (entry.IsArchive)

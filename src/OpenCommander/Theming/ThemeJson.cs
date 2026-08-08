@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using OpenCommander.Rendering;
@@ -17,6 +18,13 @@ public sealed class ThemeFile
     /// <summary>The colour table, keyed by <see cref="Theme"/> property name.</summary>
     public Dictionary<string, JsonElement>? Colors { get; set; }
 
+    /// <summary>
+    /// The optional RGB palette block. Kept as a raw <see cref="JsonElement"/> because several
+    /// shapes are accepted; see <see cref="ThemePalette.TryParse"/>. Absent in every theme file
+    /// written before palettes existed, which is exactly why it is optional.
+    /// </summary>
+    public JsonElement? Palette { get; set; }
+
     /// <summary>Any other top-level key; colour entries found here are honoured too.</summary>
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? Extra { get; set; }
@@ -29,6 +37,23 @@ public sealed class ThemeFileOut
     public string? Name { get; set; }
 
     /// <summary>The colour table, keyed by <see cref="Theme"/> property name.</summary>
+    public Dictionary<string, string>? Colors { get; set; }
+
+    /// <summary>The RGB palette block.</summary>
+    public ThemePaletteOut? Palette { get; set; }
+}
+
+/// <summary>
+/// The written shape of a theme's palette block: deliberately the same
+/// <c>{ "name": ..., "colors": { ... } }</c> shape a standalone palette file uses, so the two are
+/// interchangeable by copy and paste.
+/// </summary>
+public sealed class ThemePaletteOut
+{
+    /// <summary>Human readable palette name.</summary>
+    public string? Name { get; set; }
+
+    /// <summary>The RGB table as <c>"#RRGGBB"</c> strings, keyed by <see cref="ConsoleColor"/> name.</summary>
     public Dictionary<string, string>? Colors { get; set; }
 }
 
@@ -43,6 +68,214 @@ public sealed class ThemeFileOut
 [JsonSerializable(typeof(ThemeFileOut))]
 public sealed partial class ThemeJsonContext : JsonSerializerContext
 {
+}
+
+/// <summary>
+/// Reads the optional <c>"palette"</c> block of a theme file into a <see cref="Palette"/>.
+/// </summary>
+/// <remarks>
+/// Four shapes are accepted, all tolerant of anything they do not recognise:
+/// <list type="bullet">
+/// <item><description>
+/// a string naming a built-in palette - <c>"palette": "WindowsNt"</c>;
+/// </description></item>
+/// <item><description>
+/// an object of <c>"&lt;ConsoleColor&gt;": "#RRGGBB"</c> entries, optionally nested under
+/// <c>"colors"</c>, optionally named with <c>"name"</c>, and optionally starting from a named
+/// built-in with <c>"base"</c> - anything not mentioned keeps the base value;
+/// </description></item>
+/// <item><description>
+/// an array of 16 <c>"#RRGGBB"</c> strings in <see cref="ConsoleColor"/> order.
+/// </description></item>
+/// </list>
+/// Slot names go through <see cref="ThemeColor.TryParseColor"/>, so the Far spellings
+/// (<c>LightCyan</c>, <c>Brown</c>, <c>B_BLUE</c>) and the indices 0-15 all work.
+/// </remarks>
+public static class ThemePalette
+{
+    /// <summary>
+    /// Resolves a built-in palette by name, ignoring case and separators.
+    /// </summary>
+    /// <returns><see langword="true"/> when <paramref name="name"/> named a built-in palette.</returns>
+    public static bool TryGetBuiltIn(string? name, [NotNullWhen(true)] out Palette? palette)
+    {
+        palette = Normalize(name) switch
+        {
+            "classicvga" or "vga" or "classic" or "dos" or "ega" or "cga" => Palette.ClassicVga,
+            "windowsnt" or "nt" or "legacy" or "conhost" or "far" or "vintage" => Palette.WindowsNt,
+            "campbell" or "windowsterminal" or "terminal" => Palette.Campbell,
+            _ => null,
+        };
+
+        return palette is not null;
+    }
+
+    /// <summary>
+    /// Parses a palette block.
+    /// </summary>
+    /// <param name="element">The <c>"palette"</c> value from the theme file.</param>
+    /// <param name="fallback">The palette to start from when the block only overrides some slots.</param>
+    /// <param name="palette">The parsed palette.</param>
+    /// <returns><see langword="false"/> when the block carried nothing usable at all.</returns>
+    public static bool TryParse(JsonElement element, Palette? fallback, [NotNullWhen(true)] out Palette? palette)
+    {
+        palette = null;
+        Palette start = fallback ?? Palette.ClassicVga;
+
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.String:
+                return TryGetBuiltIn(element.GetString(), out palette);
+
+            case JsonValueKind.Array:
+            {
+                var entries = Copy(start);
+                int i = 0;
+                foreach (var item in element.EnumerateArray())
+                {
+                    if (i >= Palette.Size)
+                    {
+                        break;
+                    }
+
+                    if (item.ValueKind == JsonValueKind.String && Rgb.TryParse(item.GetString(), out Rgb? rgb))
+                    {
+                        entries[i] = rgb;
+                    }
+
+                    i++;
+                }
+
+                if (i == 0)
+                {
+                    return false;
+                }
+
+                palette = new Palette(entries, null);
+                return true;
+            }
+
+            case JsonValueKind.Object:
+            {
+                string? name = null;
+                bool touched = false;
+
+                // "base" first: it decides what the individual entries are layered on top of.
+                foreach (var prop in element.EnumerateObject())
+                {
+                    if (prop.Value.ValueKind != JsonValueKind.String)
+                    {
+                        continue;
+                    }
+
+                    string key = Normalize(prop.Name);
+                    if (key is "base" or "basepalette" or "from" or "inherits" or "extends")
+                    {
+                        if (TryGetBuiltIn(prop.Value.GetString(), out Palette? baseline))
+                        {
+                            start = baseline;
+                            touched = true;
+                        }
+                    }
+                    else if (key == "name")
+                    {
+                        name = prop.Value.GetString();
+                    }
+                }
+
+                var entries = Copy(start);
+
+                // Root level entries first, so an explicit "colors" block wins over a stray key,
+                // matching how the theme's own colour table is layered.
+                touched |= ApplyEntries(entries, element);
+
+                if (element.TryGetProperty("colors", out var colors) || element.TryGetProperty("Colors", out colors))
+                {
+                    touched |= ApplyEntries(entries, colors);
+                }
+
+                if (!touched && name is null)
+                {
+                    return false;
+                }
+
+                palette = new Palette(entries, string.IsNullOrWhiteSpace(name) ? start.Name : name);
+                return true;
+            }
+
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>Lower-cases and strips the separators a hand-written key might use.</summary>
+    internal static string Normalize(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return string.Empty;
+        }
+
+        Span<char> buf = stackalloc char[64];
+        int n = 0;
+        foreach (char c in text)
+        {
+            if (c is ' ' or '_' or '-' or '.' or '\t')
+            {
+                continue;
+            }
+
+            if (n == buf.Length)
+            {
+                return string.Empty;
+            }
+
+            buf[n++] = char.ToLowerInvariant(c);
+        }
+
+        return new string(buf[..n]);
+    }
+
+    private static Rgb[] Copy(Palette source)
+    {
+        var entries = new Rgb[Palette.Size];
+        for (int i = 0; i < Palette.Size; i++)
+        {
+            entries[i] = source[i];
+        }
+
+        return entries;
+    }
+
+    /// <summary>Applies every <c>"&lt;slot&gt;": "#RRGGBB"</c> member of an object.</summary>
+    /// <returns><see langword="true"/> when at least one entry was recognised.</returns>
+    private static bool ApplyEntries(Rgb[] entries, JsonElement obj)
+    {
+        if (obj.ValueKind != JsonValueKind.Object)
+        {
+            return false;
+        }
+
+        bool any = false;
+        foreach (var prop in obj.EnumerateObject())
+        {
+            if (prop.Value.ValueKind != JsonValueKind.String)
+            {
+                continue;
+            }
+
+            if (!ThemeColor.TryParseColor(prop.Name, out var slot)
+                || !Rgb.TryParse(prop.Value.GetString(), out Rgb? rgb))
+            {
+                continue;
+            }
+
+            entries[(int)slot & 0x0F] = rgb;
+            any = true;
+        }
+
+        return any;
+    }
 }
 
 /// <summary>

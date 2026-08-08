@@ -499,7 +499,16 @@ public sealed class ScreenBuffer
     /// spaces are trimmed, an SGR sequence is emitted only when the colour pair changes, and each
     /// non-empty row ends with a reset (<c>ESC[0m</c>). This is <c>--screenshot --ansi</c>.
     /// </summary>
-    public string RenderAnsi()
+    public string RenderAnsi() => RenderAnsi(ColorDepth.Indexed16, palette: null);
+
+    /// <summary>
+    /// Renders the buffer with SGR colour escapes at the given colour depth, so
+    /// <c>--screenshot --ansi</c> can reproduce byte for byte what the live terminal is sent.
+    /// In <see cref="ColorDepth.TrueColor"/> every style is resolved through
+    /// <paramref name="palette"/> (<see cref="Palette.ClassicVga"/> when none is given) and written
+    /// as <c>38;2;r;g;b</c>/<c>48;2;r;g;b</c>; otherwise the 16 indexed slots are used.
+    /// </summary>
+    public string RenderAnsi(ColorDepth depth, Palette? palette = null)
     {
         var sb = new StringBuilder(_width * _height * 2);
         for (int y = 0; y < _height; y++)
@@ -523,7 +532,7 @@ public sealed class ScreenBuffer
                 ref var cell = ref _cells[row + x];
                 if (!haveStyle || cell.Style != last)
                 {
-                    AppendSgr(sb, cell.Style);
+                    AppendSgr(sb, cell.Style, depth, palette);
                     last = cell.Style;
                     haveStyle = true;
                 }
@@ -555,9 +564,36 @@ public sealed class ScreenBuffer
     // yellow, blue, magenta, cyan, white - hence the permutation table.
     private static readonly int[] AnsiIndex = [0, 4, 2, 6, 1, 5, 3, 7];
 
-    /// <summary>Appends the SGR escape sequence for a colour pair, e.g. <c>ESC[36;44m</c>.</summary>
-    internal static void AppendSgr(StringBuilder sb, CellStyle style)
+    /// <summary>Appends the indexed SGR escape sequence for a colour pair, e.g. <c>ESC[36;44m</c>.</summary>
+    internal static void AppendSgr(StringBuilder sb, CellStyle style) =>
+        AppendSgr(sb, style, ColorDepth.Indexed16, palette: null);
+
+    /// <summary>
+    /// Appends the SGR escape sequence for a colour pair at the given colour depth. Foreground and
+    /// background always go out as one sequence - SGR takes a parameter list, and one escape per
+    /// style change is what keeps the frame small.
+    /// </summary>
+    /// <remarks>
+    /// The 24-bit form uses semicolons (<c>ESC[38;2;r;g;b;48;2;r;g;bm</c>), never the ITU colon
+    /// form: no terminal requires colons, and every Windows console - conhost, ConEmu, mintty -
+    /// accepts semicolons only.
+    /// </remarks>
+    internal static void AppendSgr(StringBuilder sb, CellStyle style, ColorDepth depth, Palette? palette)
     {
+        if (depth == ColorDepth.TrueColor)
+        {
+            Palette p = palette ?? Palette.ClassicVga;
+            Rgb fgRgb = p[style.Fg];
+            Rgb bgRgb = p[style.Bg];
+
+            sb.Append(Esc).Append("[38;2;")
+              .Append(fgRgb.R).Append(';').Append(fgRgb.G).Append(';').Append(fgRgb.B)
+              .Append(";48;2;")
+              .Append(bgRgb.R).Append(';').Append(bgRgb.G).Append(';').Append(bgRgb.B)
+              .Append('m');
+            return;
+        }
+
         int fg = (int)style.Fg & 0x0F;
         int bg = (int)style.Bg & 0x0F;
         int fgCode = fg < 8 ? 30 + AnsiIndex[fg] : 90 + AnsiIndex[fg - 8];

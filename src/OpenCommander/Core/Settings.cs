@@ -1,6 +1,65 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace OpenCommander.Core;
+
+/// <summary>
+/// How much colour the renderer writes - the <c>--colors</c> option and the <c>colors</c> setting.
+/// </summary>
+/// <remarks>
+/// The 16 indexed ANSI colours are only names: the terminal's own scheme decides what they look
+/// like, and under Windows Terminal's default "Campbell" scheme blue and cyan are two neighbouring
+/// blues, which washes the panels out. <see cref="TrueColor"/> writes literal RGB from a
+/// <see cref="Rendering.Palette"/> instead, pinning the classic look; <see cref="Indexed"/> is the
+/// escape hatch for anyone who themes their terminal deliberately.
+/// </remarks>
+[JsonConverter(typeof(ColorModeJsonConverter))]
+public enum ColorMode
+{
+    /// <summary>Ask <see cref="Rendering.ColorDepthDetector"/> what the terminal can be trusted with.</summary>
+    Auto,
+
+    /// <summary>Always write 24-bit colour, whatever the terminal advertises.</summary>
+    TrueColor,
+
+    /// <summary>Always write the 16 indexed slots, leaving the terminal's own scheme in charge.</summary>
+    Indexed,
+}
+
+/// <summary>
+/// Reads and writes <see cref="ColorMode"/> as the same words <c>--colors</c> accepts.
+/// </summary>
+/// <remarks>
+/// Deliberately forgiving on the way in: an unrecognised value falls back to
+/// <see cref="ColorMode.Auto"/> rather than throwing, so one mistyped colour word cannot discard
+/// every other entry in the settings file.
+/// </remarks>
+public sealed class ColorModeJsonConverter : JsonConverter<ColorMode>
+{
+    /// <summary>The canonical spelling of a mode, as written to the settings file.</summary>
+    /// <param name="value">The mode.</param>
+    /// <returns><c>auto</c>, <c>truecolor</c> or <c>indexed</c>.</returns>
+    public static string ToText(ColorMode value) => value switch
+    {
+        ColorMode.TrueColor => "truecolor",
+        ColorMode.Indexed => "indexed",
+        _ => "auto",
+    };
+
+    /// <inheritdoc/>
+    public override ColorMode Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
+        reader.TokenType == JsonTokenType.String
+            && CommandLineArgs.TryParseColorMode(reader.GetString(), out ColorMode mode)
+                ? mode
+                : ColorMode.Auto;
+
+    /// <inheritdoc/>
+    public override void Write(Utf8JsonWriter writer, ColorMode value, JsonSerializerOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(writer);
+        writer.WriteStringValue(ToText(value));
+    }
+}
 
 /// <summary>
 /// The persisted user preferences.
@@ -70,6 +129,21 @@ public sealed class Settings
 
     /// <summary>Path of a theme file to load instead of the built-in palette, or <see langword="null"/>.</summary>
     public string? ThemePath { get; set; }
+
+    /// <summary>
+    /// How much colour the renderer writes; <see cref="ColorMode.Auto"/> detects it from the
+    /// terminal. Overridden for one run by <c>--colors</c>, and by the <c>NO_COLOR</c> environment
+    /// variable - see <see cref="Application.ResolveColorDepth(CommandLineArgs, Settings)"/>.
+    /// </summary>
+    public ColorMode Colors { get; set; } = ColorMode.Auto;
+
+    /// <summary>
+    /// Path of a palette file giving the RGB behind the 16 colour slots, or <see langword="null"/>
+    /// for the built-in classic VGA table. Only consulted in
+    /// <see cref="Rendering.ColorDepth.TrueColor"/>; a missing or malformed file falls back to the
+    /// built-in one rather than failing the start-up.
+    /// </summary>
+    public string? PalettePath { get; set; }
 
     /// <summary>
     /// Where <see cref="Load"/> and <see cref="Save"/> look: <c>%APPDATA%\OpenCommander\settings.json</c>

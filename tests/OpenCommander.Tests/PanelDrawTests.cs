@@ -992,6 +992,43 @@ public class PanelSelectionTests
         Assert.False(panel.Entries[2].Selected);
     }
 
+    /// <summary>
+    /// A hidden or system folder must be dimmed, not painted the bright directory white. Far shows
+    /// $Recycle.Bin, ProgramData and System Volume Information dim even though all three are
+    /// folders; ranking directory above hidden made every .git and .vs shout in white instead.
+    /// </summary>
+    [Fact]
+    public void HiddenOutranksDirectoryWhenColouringAnEntry()
+    {
+        var panel = PanelFixture.Panel();
+        Theme theme = panel.Theme;
+
+        FileEntry plainDir = PanelFixture.Dir("src");
+        FileEntry hiddenDir = new()
+        {
+            Name = ".git",
+            FullPath = Path.Combine(PanelFixture.DemoPath, ".git"),
+            IsDirectory = true,
+            Attributes = FileAttributes.Directory | FileAttributes.Hidden,
+        };
+        FileEntry systemDir = new()
+        {
+            Name = "System Volume Information",
+            FullPath = Path.Combine(PanelFixture.DemoPath, "System Volume Information"),
+            IsDirectory = true,
+            Attributes = FileAttributes.Directory | FileAttributes.System,
+        };
+
+        Assert.Equal(theme.PanelDirectory, panel.StyleFor(plainDir, onCursor: false));
+        Assert.Equal(theme.PanelHidden, panel.StyleFor(hiddenDir, onCursor: false));
+        Assert.Equal(theme.PanelHidden, panel.StyleFor(systemDir, onCursor: false));
+
+        // The cursor and a tag still outrank both.
+        Assert.Equal(theme.PanelCursor, panel.StyleFor(hiddenDir, onCursor: true));
+        hiddenDir.Selected = true;
+        Assert.Equal(theme.PanelSelectedFile, panel.StyleFor(hiddenDir, onCursor: false));
+    }
+
     [Fact]
     public void SelectedOrCurrentFallsBackToTheCursorButNeverToTheParentEntry()
     {

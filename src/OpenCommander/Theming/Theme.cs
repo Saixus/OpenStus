@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using OpenCommander.Rendering;
 
@@ -19,6 +20,33 @@ public sealed class Theme
 
     /// <summary>Human readable theme name.</summary>
     public string Name { get; set; } = "Far Default";
+
+    private Rendering.Palette _palette = Rendering.Palette.ClassicVga;
+
+    /// <summary>
+    /// The RGB values this theme wants behind the 16 console slots.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The colour table above never changes with colour depth - it always names console slots, and
+    /// a slot is a slot whether it is written as <c>SGR 96;44</c> or as
+    /// <c>SGR 38;2;85;255;255;48;2;0;0;170</c>. What changes is this palette: in
+    /// <see cref="ColorDepth.Indexed16"/> the terminal's own scheme decides what a slot looks like
+    /// and this table is ignored, and in <see cref="ColorDepth.TrueColor"/> it is what pins the
+    /// classic look regardless of how the terminal is themed. That is why there is no separate
+    /// "true colour" theme: one theme, two depths, and the palette is the only variable.
+    /// </para>
+    /// <para>
+    /// A theme file may carry its own <c>"palette"</c> block, which is how a user retheme can go
+    /// all the way down to the RGB without touching their terminal settings.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">A null palette was assigned.</exception>
+    public Rendering.Palette Palette
+    {
+        get => _palette;
+        set => _palette = value ?? throw new ArgumentNullException(nameof(value));
+    }
 
     // ---- Panels ---------------------------------------------------------------------------
 
@@ -260,99 +288,195 @@ public sealed class Theme
 
     // =============================================================================================
 
-    /// <summary>The canonical Far Manager palette.</summary>
+    /// <summary>
+    /// The canonical Far Manager palette over the classic DOS RGB table
+    /// (<see cref="Rendering.Palette.ClassicVga"/>).
+    /// </summary>
     public static Theme FarDefault() => new();
 
+    /// <summary>
+    /// The same colour table over the legacy Windows NT console RGB
+    /// (<see cref="Rendering.Palette.WindowsNt"/>) - the values Far Manager itself installs into the
+    /// console at startup, so this is what a classic Far screenshot is actually showing.
+    /// </summary>
+    /// <remarks>
+    /// The only difference from <see cref="FarDefault"/> is the palette: a deeper
+    /// <c>#000080</c> blue and a pure <c>#00FFFF</c> cyan instead of the DOS <c>#0000AA</c> and
+    /// <c>#55FFFF</c>, which lifts the dominant panel pair from 10.84:1 to 12.77:1. Every one of the
+    /// 74 entries below is identical.
+    /// </remarks>
+    public static Theme FarNt() => new() { Name = "Far NT", Palette = Rendering.Palette.WindowsNt };
+
+    /// <summary>The names of the built-in themes, in the order they are offered.</summary>
+    public static IReadOnlyList<string> BuiltInNames { get; } = ["Far Default", "Far NT"];
+
+    /// <summary>
+    /// Resolves a built-in theme by name, ignoring case and any separators. Accepts the display
+    /// names in <see cref="BuiltInNames"/> as well as the short forms <c>far</c>, <c>default</c>,
+    /// <c>nt</c> and <c>windowsnt</c>.
+    /// </summary>
+    /// <returns><see langword="true"/> when <paramref name="name"/> named a built-in theme.</returns>
+    public static bool TryGetBuiltIn(string? name, [NotNullWhen(true)] out Theme? theme)
+    {
+        theme = ThemePalette.Normalize(name) switch
+        {
+            "fardefault" or "far" or "default" or "classic" => FarDefault(),
+            "farnt" or "nt" or "windowsnt" => FarNt(),
+            _ => null,
+        };
+
+        return theme is not null;
+    }
+
+    /// <summary>
+    /// Fills <paramref name="t"/> with Far Manager's default palette.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Every entry is transcribed from <c>far/palette.cpp</c>, whose line number is quoted on the
+    /// right. Far spells each default as <c>F_&lt;fg&gt;|B_&lt;bg&gt;</c>, and the two halves do
+    /// <em>not</em> come from the same set of constants: <c>F_LIGHTCYAN</c> is
+    /// <c>C_LIGHTCYAN</c> = index 11 = <see cref="ConsoleColor.Cyan"/>, while <c>B_CYAN</c> is
+    /// <c>C_CYAN</c> = index 3 = <see cref="ConsoleColor.DarkCyan"/> (<c>far/palette.hpp</c> lines
+    /// 89, 98, 120 and 129 - <c>B_LIGHTCYAN</c> exists but Far never uses it in the defaults).
+    /// Collapsing the two onto one constant made every cyan bar render as <c>SGR 106</c> where Far
+    /// writes <c>SGR 46</c>: too loud rather than washed out, and no palette change can fix it.
+    /// The locals below keep the halves apart, which is why the background names are prefixed.
+    /// </para>
+    /// <para>
+    /// A handful of entries have no counterpart in Far's palette at all - file-type colours come
+    /// from <c>Highlight.farconfig</c>, and the panel status line, drive info and progress bars are
+    /// this application's own. Those are marked and left as they were rather than invented.
+    /// </para>
+    /// </remarks>
     private static void ApplyFarDefault(Theme t)
     {
-        // Far's palette source spells these C_BLUE and C_LIGHTCYAN; in ConsoleColor terms that is
-        // DarkBlue (index 1) and Cyan (index 11).
-        const ConsoleColor blue = ConsoleColor.DarkBlue;
-        const ConsoleColor cyan = ConsoleColor.Cyan;
+        // Foregrounds - Far's F_* macros.
+        const ConsoleColor black = ConsoleColor.Black;          // F_BLACK      index 0
+        const ConsoleColor darkGray = ConsoleColor.DarkGray;    // F_DARKGRAY   index 8
+        const ConsoleColor lightGray = ConsoleColor.Gray;       // F_LIGHTGRAY  index 7
+        const ConsoleColor lightCyan = ConsoleColor.Cyan;       // F_LIGHTCYAN  index 11
+        const ConsoleColor yellow = ConsoleColor.Yellow;        // F_YELLOW     index 14
+        const ConsoleColor white = ConsoleColor.White;          // F_WHITE      index 15
+
+        // Backgrounds - Far's B_* macros. bCyan is the one that bites: index 3, not 11.
+        const ConsoleColor bBlack = ConsoleColor.Black;         // B_BLACK      index 0
+        const ConsoleColor bBlue = ConsoleColor.DarkBlue;       // B_BLUE       index 1
+        const ConsoleColor bCyan = ConsoleColor.DarkCyan;       // B_CYAN       index 3
+        const ConsoleColor bRed = ConsoleColor.DarkRed;         // B_RED        index 4
+        const ConsoleColor bLightGray = ConsoleColor.Gray;      // B_LIGHTGRAY  index 7
 
         t.Name = "Far Default";
+        t.Palette = Rendering.Palette.ClassicVga;
 
-        t.PanelBox = new CellStyle(cyan, blue);
-        t.PanelBoxActive = new CellStyle(cyan, blue);
-        t.PanelTitle = new CellStyle(cyan, blue);
-        t.PanelTitleActive = new CellStyle(ConsoleColor.Black, cyan);
-        t.PanelColumnTitle = new CellStyle(ConsoleColor.Yellow, blue);
-        t.PanelText = new CellStyle(cyan, blue);
-        t.PanelDirectory = new CellStyle(ConsoleColor.White, blue);
-        t.PanelHidden = new CellStyle(ConsoleColor.DarkGray, blue);
-        t.PanelExecutable = new CellStyle(ConsoleColor.White, blue);
-        t.PanelArchive = new CellStyle(ConsoleColor.Magenta, blue);
-        t.PanelSelectedFile = new CellStyle(ConsoleColor.Yellow, blue);
-        t.PanelCursor = new CellStyle(ConsoleColor.Black, cyan);
-        t.PanelCursorSelected = new CellStyle(ConsoleColor.Yellow, cyan);
-        t.PanelStatus = new CellStyle(ConsoleColor.White, blue);
-        t.PanelStatusFile = new CellStyle(ConsoleColor.White, blue);
-        t.PanelTotals = new CellStyle(ConsoleColor.Yellow, blue);
-        t.PanelScrollBar = new CellStyle(cyan, blue);
-        t.PanelEmpty = new CellStyle(cyan, blue);
-        t.PanelDriveInfo = new CellStyle(ConsoleColor.White, blue);
-        t.QuickSearch = new CellStyle(ConsoleColor.Black, cyan);
+        // ---- Panels -------------------------------------------------------------------------
+        // Far paints the frame, the column separators, the file text, the path caption, the totals
+        // line and the scroll bar with ONE attribute: F_LIGHTCYAN|B_BLUE. COL_PANELBOX and
+        // COL_PANELTEXT are distinct enum constants carrying the same default, so the near
+        // monochrome panel is faithful rather than a bug, and the contrast has to come from the
+        // palette (10.84:1 on ClassicVga) instead of from spending more colours on the frame.
+        t.PanelBox = new CellStyle(lightCyan, bBlue);            // COL_PANELBOX             :132
+        t.PanelBoxActive = new CellStyle(lightCyan, bBlue);      // Far has no active-frame colour
+        t.PanelTitle = new CellStyle(lightCyan, bBlue);          // COL_PANELTITLE           :82
+        t.PanelTitleActive = new CellStyle(black, bCyan);        // COL_PANELSELECTEDTITLE   :83
+        t.PanelColumnTitle = new CellStyle(yellow, bBlue);       // COL_PANELCOLUMNTITLE     :84
+        t.PanelText = new CellStyle(lightCyan, bBlue);           // COL_PANELTEXT            :76
 
-        t.Desktop = new CellStyle(ConsoleColor.Gray, ConsoleColor.Black);
-        t.Clock = new CellStyle(ConsoleColor.Yellow, blue);
-        t.KeyBarNum = new CellStyle(ConsoleColor.White, ConsoleColor.Black);
-        t.KeyBarText = new CellStyle(ConsoleColor.Black, cyan);
-        t.KeyBarBackground = new CellStyle(ConsoleColor.Gray, ConsoleColor.Black);
-        t.CommandLinePrefix = new CellStyle(ConsoleColor.Gray, blue);
-        t.CommandLineText = new CellStyle(ConsoleColor.White, blue);
-        t.CommandLineSelected = new CellStyle(ConsoleColor.Black, cyan);
+        // File-type colours: not palette entries in Far, they come from Highlight.farconfig.
+        t.PanelDirectory = new CellStyle(white, bBlue);          // no Far palette entry
+        t.PanelHidden = new CellStyle(darkGray, bBlue);          // no Far palette entry
+        t.PanelExecutable = new CellStyle(white, bBlue);         // no Far palette entry
+        t.PanelArchive = new CellStyle(ConsoleColor.Magenta, bBlue); // no Far palette entry
 
-        t.MenuBarText = new CellStyle(ConsoleColor.Black, cyan);
-        t.MenuBarHighlight = new CellStyle(ConsoleColor.DarkRed, cyan);
-        t.MenuBarSelected = new CellStyle(ConsoleColor.White, ConsoleColor.Black);
-        t.MenuBarSelectedHighlight = new CellStyle(ConsoleColor.Yellow, ConsoleColor.Black);
+        t.PanelSelectedFile = new CellStyle(yellow, bBlue);      // COL_PANELSELECTEDTEXT    :77
+        t.PanelCursor = new CellStyle(black, bCyan);             // COL_PANELCURSOR          :80
+        t.PanelCursorSelected = new CellStyle(yellow, bCyan);    // COL_PANELSELECTEDCURSOR  :81
+        t.PanelStatus = new CellStyle(white, bBlue);             // no Far palette entry
+        t.PanelStatusFile = new CellStyle(white, bBlue);         // no Far palette entry
+        t.PanelTotals = new CellStyle(lightCyan, bBlue);         // COL_PANELTOTALINFO       :85
+        t.PanelScrollBar = new CellStyle(lightCyan, bBlue);      // COL_PANELSCROLLBAR       :130
+        t.PanelEmpty = new CellStyle(lightCyan, bBlue);          // the panel's own ground = COL_PANELTEXT
+        t.PanelDriveInfo = new CellStyle(white, bBlue);          // no Far palette entry
+        t.QuickSearch = new CellStyle(black, bCyan);             // no Far entry; follows the B_CYAN idiom
 
-        t.MenuBox = new CellStyle(ConsoleColor.Black, cyan);
-        t.MenuTitle = new CellStyle(ConsoleColor.Black, cyan);
-        t.MenuText = new CellStyle(ConsoleColor.Black, cyan);
-        t.MenuHighlight = new CellStyle(ConsoleColor.DarkRed, cyan);
-        t.MenuSelected = new CellStyle(ConsoleColor.White, ConsoleColor.Black);
-        t.MenuSelectedHighlight = new CellStyle(ConsoleColor.Yellow, ConsoleColor.Black);
-        t.MenuDisabled = new CellStyle(ConsoleColor.DarkGray, cyan);
-        t.MenuSeparator = new CellStyle(ConsoleColor.Black, cyan);
-        t.MenuScroll = new CellStyle(ConsoleColor.Black, cyan);
+        // ---- Screen chrome ------------------------------------------------------------------
+        // COL_COMMANDLINE and COL_COMMANDLINEPREFIX are the sentinel ColorsInit::Default (:114,
+        // :140), which resolves to colors::default_color(): Far deliberately inherits the
+        // terminal's own default pair there so the command line matches the shell it runs. A
+        // CellStyle cannot say "inherit", and this application's stand-in for an untouched console
+        // is CellStyle.Default - which is also what Desktop paints, so the command line now sits
+        // flush on its backdrop instead of floating on a blue strip.
+        t.Desktop = CellStyle.Default;                           // no Far entry; the user screen
+        t.Clock = new CellStyle(black, bCyan);                   // COL_CLOCK                :115
+        t.KeyBarNum = new CellStyle(lightGray, bBlack);          // COL_KEYBARNUM            :111
+        t.KeyBarText = new CellStyle(black, bCyan);              // COL_KEYBARTEXT           :112
+        t.KeyBarBackground = new CellStyle(lightGray, bBlack);   // COL_KEYBARBACKGROUND     :113
+        // Far's COL_COMMANDLINE is the ColorsInit::Default sentinel, i.e. "inherit the console's
+        // own default pair". On a real Far session that pair resolves to the blue backdrop Far put
+        // there, which is why the command line sits on the same blue as the panels in every Far
+        // screenshot - so blue is what faithfulness means here, not the black of a bare console.
+        // Desktop below stays CellStyle.Default: that one really is the untouched user screen.
+        t.CommandLinePrefix = new CellStyle(lightGray, bBlue);   // COL_COMMANDLINEPREFIX    :140
+        t.CommandLineText = new CellStyle(lightGray, bBlue);     // COL_COMMANDLINE          :114
+        t.CommandLineSelected = new CellStyle(black, bCyan);     // COL_COMMANDLINESELECTED  :135
 
-        t.DialogBox = new CellStyle(ConsoleColor.Black, ConsoleColor.Gray);
-        t.DialogBoxTitle = new CellStyle(ConsoleColor.Black, ConsoleColor.Gray);
-        t.DialogText = new CellStyle(ConsoleColor.Black, ConsoleColor.Gray);
-        t.DialogHighlight = new CellStyle(ConsoleColor.DarkRed, ConsoleColor.Gray);
-        t.DialogEdit = new CellStyle(ConsoleColor.Black, cyan);
-        t.DialogEditSelected = new CellStyle(ConsoleColor.White, blue);
-        t.DialogEditDisabled = new CellStyle(ConsoleColor.DarkGray, ConsoleColor.Gray);
-        t.DialogButton = new CellStyle(ConsoleColor.Black, ConsoleColor.Gray);
-        t.DialogButtonHighlight = new CellStyle(ConsoleColor.DarkRed, ConsoleColor.Gray);
-        t.DialogButtonSelected = new CellStyle(ConsoleColor.Black, cyan);
-        t.DialogButtonSelectedHighlight = new CellStyle(ConsoleColor.DarkRed, cyan);
-        t.DialogListText = new CellStyle(ConsoleColor.Black, ConsoleColor.Gray);
-        t.DialogListHighlight = new CellStyle(ConsoleColor.DarkRed, ConsoleColor.Gray);
-        t.DialogListSelected = new CellStyle(ConsoleColor.Black, cyan);
-        t.DialogListSelectedHighlight = new CellStyle(ConsoleColor.DarkRed, cyan);
+        // ---- Horizontal (F9) menu bar - Far's HMenu.* ---------------------------------------
+        t.MenuBarText = new CellStyle(black, bCyan);             // COL_HMENUTEXT            :72
+        t.MenuBarHighlight = new CellStyle(yellow, bCyan);       // COL_HMENUHIGHLIGHT       :74
+        t.MenuBarSelected = new CellStyle(white, bBlack);        // COL_HMENUSELECTEDTEXT    :73
+        t.MenuBarSelectedHighlight = new CellStyle(yellow, bBlack); // COL_HMENUSELECTEDHIGHLIGHT :75
 
-        t.WarnDialogBox = new CellStyle(ConsoleColor.White, ConsoleColor.DarkRed);
-        t.WarnDialogBoxTitle = new CellStyle(ConsoleColor.White, ConsoleColor.DarkRed);
-        t.WarnDialogText = new CellStyle(ConsoleColor.White, ConsoleColor.DarkRed);
-        t.WarnDialogHighlight = new CellStyle(ConsoleColor.Yellow, ConsoleColor.DarkRed);
-        t.WarnDialogButton = new CellStyle(ConsoleColor.White, ConsoleColor.DarkRed);
-        t.WarnDialogButtonHighlight = new CellStyle(ConsoleColor.Yellow, ConsoleColor.DarkRed);
-        t.WarnDialogButtonSelected = new CellStyle(ConsoleColor.Black, ConsoleColor.Gray);
-        t.WarnDialogButtonSelectedHighlight = new CellStyle(ConsoleColor.DarkRed, ConsoleColor.Gray);
+        // ---- Popup menus - Far's Menu.*. These are WHITE on dark cyan, not black. ------------
+        t.MenuBox = new CellStyle(white, bCyan);                 // COL_MENUBOX              :70
+        t.MenuTitle = new CellStyle(white, bCyan);               // COL_MENUTITLE            :71
+        t.MenuText = new CellStyle(white, bCyan);                // COL_MENUTEXT             :66
+        t.MenuHighlight = new CellStyle(yellow, bCyan);          // COL_MENUHIGHLIGHT        :68
+        t.MenuSelected = new CellStyle(white, bBlack);           // COL_MENUSELECTEDTEXT     :67
+        t.MenuSelectedHighlight = new CellStyle(yellow, bBlack); // COL_MENUSELECTEDHIGHLIGHT :69
+        t.MenuDisabled = new CellStyle(darkGray, bCyan);         // COL_MENUDISABLEDTEXT     :147
+        t.MenuSeparator = new CellStyle(white, bCyan);           // no entry; drawn with COL_MENUBOX
+        t.MenuScroll = new CellStyle(white, bCyan);              // COL_MENUSCROLLBAR        :138
 
-        t.ViewerText = new CellStyle(ConsoleColor.Gray, blue);
-        t.ViewerSelected = new CellStyle(ConsoleColor.Black, cyan);
-        t.ViewerStatus = new CellStyle(ConsoleColor.Black, cyan);
-        t.ViewerArrows = new CellStyle(ConsoleColor.Yellow, blue);
-        t.EditorText = new CellStyle(ConsoleColor.Gray, blue);
-        t.EditorSelected = new CellStyle(ConsoleColor.Black, cyan);
-        t.EditorStatus = new CellStyle(ConsoleColor.Black, cyan);
-        t.EditorScroll = new CellStyle(cyan, blue);
+        // ---- Dialogs ------------------------------------------------------------------------
+        t.DialogBox = new CellStyle(black, bLightGray);          // COL_DIALOGBOX            :89
+        t.DialogBoxTitle = new CellStyle(black, bLightGray);     // COL_DIALOGBOXTITLE       :90
+        t.DialogText = new CellStyle(black, bLightGray);         // COL_DIALOGTEXT           :87
+        t.DialogHighlight = new CellStyle(yellow, bLightGray);   // COL_DIALOGHIGHLIGHTTEXT  :88
+        t.DialogEdit = new CellStyle(black, bCyan);              // COL_DIALOGEDIT           :92
+        t.DialogEditSelected = new CellStyle(white, bBlack);     // COL_DIALOGEDITSELECTED   :134
+        t.DialogEditDisabled = new CellStyle(darkGray, bCyan);   // COL_DIALOGEDITDISABLED   :142
+        t.DialogButton = new CellStyle(black, bLightGray);       // COL_DIALOGBUTTON         :93
+        t.DialogButtonHighlight = new CellStyle(yellow, bLightGray);        // COL_DIALOGHIGHLIGHTBUTTON :95
+        t.DialogButtonSelected = new CellStyle(black, bCyan);               // COL_DIALOGSELECTEDBUTTON  :94
+        t.DialogButtonSelectedHighlight = new CellStyle(yellow, bCyan);     // COL_DIALOGHIGHLIGHTSELECTEDBUTTON :96
+        t.DialogListText = new CellStyle(black, bLightGray);                // COL_DIALOGLISTTEXT        :97
+        t.DialogListHighlight = new CellStyle(yellow, bLightGray);          // COL_DIALOGLISTHIGHLIGHT   :99
+        t.DialogListSelected = new CellStyle(white, bBlack);                // COL_DIALOGLISTSELECTEDTEXT :98
+        t.DialogListSelectedHighlight = new CellStyle(yellow, bBlack);      // COL_DIALOGLISTSELECTEDHIGHLIGHT :100
 
-        t.ProgressBar = new CellStyle(cyan, blue);
-        t.ProgressBarEmpty = new CellStyle(ConsoleColor.DarkGray, blue);
+        // ---- Warning dialogs ----------------------------------------------------------------
+        t.WarnDialogBox = new CellStyle(white, bRed);            // COL_WARNDIALOGBOX        :103
+        t.WarnDialogBoxTitle = new CellStyle(white, bRed);       // COL_WARNDIALOGBOXTITLE   :104
+        t.WarnDialogText = new CellStyle(white, bRed);           // COL_WARNDIALOGTEXT       :101
+        t.WarnDialogHighlight = new CellStyle(yellow, bRed);     // COL_WARNDIALOGHIGHLIGHTTEXT :102
+        t.WarnDialogButton = new CellStyle(white, bRed);         // COL_WARNDIALOGBUTTON     :107
+        t.WarnDialogButtonHighlight = new CellStyle(yellow, bRed);          // COL_WARNDIALOGHIGHLIGHTBUTTON :109
+        t.WarnDialogButtonSelected = new CellStyle(black, bLightGray);      // COL_WARNDIALOGSELECTEDBUTTON  :108
+        t.WarnDialogButtonSelectedHighlight = new CellStyle(yellow, bLightGray); // COL_WARNDIALOGHIGHLIGHTSELECTEDBUTTON :110
+
+        // ---- Viewer / editor ----------------------------------------------------------------
+        t.ViewerText = new CellStyle(lightCyan, bBlue);          // COL_VIEWERTEXT           :116
+        t.ViewerSelected = new CellStyle(black, bCyan);          // COL_VIEWERSELECTEDTEXT   :117
+        t.ViewerStatus = new CellStyle(black, bCyan);            // COL_VIEWERSTATUS         :118
+        t.ViewerArrows = new CellStyle(yellow, bBlue);           // COL_VIEWERARROWS         :136
+        t.EditorText = new CellStyle(lightCyan, bBlue);          // COL_EDITORTEXT           :119
+        t.EditorSelected = new CellStyle(black, bCyan);          // COL_EDITORSELECTEDTEXT   :120
+        t.EditorStatus = new CellStyle(black, bCyan);            // COL_EDITORSTATUS         :121
+        t.EditorScroll = new CellStyle(lightCyan, bBlue);        // COL_EDITORSCROLLBAR      :193
+
+        // ---- Progress. No Far counterpart: Far draws copy progress with dialog colours. ------
+        t.ProgressBar = new CellStyle(lightCyan, bBlue);         // no Far palette entry
+        t.ProgressBarEmpty = new CellStyle(darkGray, bBlue);     // no Far palette entry
     }
 
     // =============================================================================================
@@ -513,6 +637,11 @@ public sealed class Theme
     /// entries are ignored, so a partial or slightly out-of-date file still loads cleanly.
     /// Throws only when the file cannot be read or is not valid JSON.
     /// </summary>
+    /// <remarks>
+    /// An optional <c>"palette"</c> block sets <see cref="Palette"/>. A file written before that
+    /// block existed simply keeps <see cref="Rendering.Palette.ClassicVga"/>, so old themes load
+    /// unchanged.
+    /// </remarks>
     public static Theme LoadFromJson(string path)
     {
         string json = File.ReadAllText(path);
@@ -536,6 +665,12 @@ public sealed class Theme
         // The flat form first, so an explicit "colors" block wins over a stray root-level key.
         Apply(theme, file.Extra);
         Apply(theme, file.Colors);
+
+        if (file.Palette is { } block && ThemePalette.TryParse(block, theme.Palette, out var palette))
+        {
+            theme.Palette = palette;
+        }
+
         return theme;
     }
 
@@ -560,7 +695,11 @@ public sealed class Theme
         }
     }
 
-    /// <summary>Writes the complete palette to a JSON file, creating the directory if needed.</summary>
+    /// <summary>
+    /// Writes the complete palette to a JSON file, creating the directory if needed. The
+    /// <c>"palette"</c> block is written in the same shape a standalone palette file uses, so it
+    /// can be moved between the two by copy and paste.
+    /// </summary>
     public void SaveToJson(string path)
     {
         var colors = new Dictionary<string, string>(AllSlots.Length, StringComparer.Ordinal);
@@ -569,7 +708,19 @@ public sealed class Theme
             colors[slot.Name] = ThemeColor.Format(slot.Get(this));
         }
 
-        var dto = new ThemeFileOut { Name = Name, Colors = colors };
+        var rgb = new Dictionary<string, string>(Rendering.Palette.Size, StringComparer.Ordinal);
+        for (int i = 0; i < Rendering.Palette.Size; i++)
+        {
+            rgb[((ConsoleColor)i).ToString()] = Palette[i].ToHex();
+        }
+
+        var dto = new ThemeFileOut
+        {
+            Name = Name,
+            Colors = colors,
+            Palette = new ThemePaletteOut { Name = Palette.Name, Colors = rgb },
+        };
+
         string json = JsonSerializer.Serialize(dto, ThemeJsonContext.Default.ThemeFileOut);
 
         string? dir = Path.GetDirectoryName(Path.GetFullPath(path));
@@ -582,8 +733,9 @@ public sealed class Theme
     }
 
     /// <summary>
-    /// Loads <paramref name="path"/> when it points at a readable theme file, and falls back to
-    /// <see cref="FarDefault"/> for anything else. Never throws.
+    /// Loads <paramref name="path"/> when it points at a readable theme file, resolves it as a
+    /// built-in theme name when it does not, and falls back to <see cref="FarDefault"/> for
+    /// anything else. Never throws.
     /// </summary>
     public static Theme LoadOrDefault(string? path)
     {
@@ -594,11 +746,17 @@ public sealed class Theme
 
         try
         {
-            return File.Exists(path) ? LoadFromJson(path) : FarDefault();
+            if (File.Exists(path))
+            {
+                return LoadFromJson(path);
+            }
         }
         catch
         {
             return FarDefault();
         }
+
+        // Not a file - a bare built-in name is worth honouring before giving up on it.
+        return TryGetBuiltIn(path, out var builtIn) ? builtIn : FarDefault();
     }
 }

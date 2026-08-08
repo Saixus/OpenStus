@@ -6,7 +6,36 @@ All notable changes to Open Commander are recorded here. The format follows
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- **24-bit colour.** The renderer can write literal RGB (`38;2;r;g;b` / `48;2;r;g;b`) resolved
+  through a 16-entry palette instead of naming the terminal's own colour slots, so the classic look
+  survives whatever scheme the terminal is themed with. The default palette is the classic VGA table;
+  the legacy Windows console table Far Manager installs ships alongside it.
+- **`--colors <auto|truecolor|indexed>`** and the matching `colors` setting. `auto` — the default —
+  detects what the terminal can take from `COLORTERM`, `WT_SESSION`, `ConEmuANSI`, `TERM_PROGRAM`,
+  `TERM` and the Windows build number, in that order of trust. `indexed` is the escape hatch for
+  anyone who themes their terminal deliberately.
+- **`--palette <file.json>`** and the matching `palettePath` setting: the RGB behind the 16 colour
+  slots, as `"#RRGGBB"` keyed by `ConsoleColor` name, index or the usual aliases. Omitted slots keep
+  their built-in value, and a missing or malformed file falls back to the built-in table.
+- **`NO_COLOR` support.** Present and non-empty, whatever its value, it pins the run to the 16
+  indexed slots so the terminal's own scheme stays in charge. Only an explicit `--colors` overrides
+  it; the saved setting and the detection do not.
+
+### Changed
+
+- `--screenshot --ansi` now renders at the colour depth and through the palette the run resolved,
+  rather than always emitting the indexed slots, so a screenshot shows what the live terminal is
+  sent. Piping it to a file still yields indexed output, since redirected output is one of the
+  signals detection reads; `--colors truecolor` overrides that.
+- The panel colours are corrected against Far Manager's `palette.cpp`: `B_CYAN` is `DarkCyan`, not
+  the bright `Cyan` the interface was using as a background, which made the cursor bar, the key bar
+  captions, the clock and the active panel title far louder than Far's own. The clock, the key bar
+  numbers, the panel totals, the menu colours, the dialog highlight and the viewer text were brought
+  back in line with the same source.
+- `--theme` is described as a theme file rather than a palette file, now that the two are separate
+  things: a palette says what "cyan" is, a theme says which parts of the interface are cyan.
 
 ## [0.1.0] - 2026-08-08
 

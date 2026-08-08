@@ -71,13 +71,34 @@ internal static class Program
         app.Layout();
         app.DrawFrame();
 
-        ScreenBuffer buffer = app.Terminal.Buffer;
-        string frame = args.Ansi ? buffer.RenderAnsi() : buffer.RenderPlainText();
-
         using Stream stdout = Console.OpenStandardOutput();
-        WriteFrame(stdout, frame);
+        WriteFrame(stdout, RenderFrame(app, args));
 
         return 0;
+    }
+
+    /// <summary>
+    /// Renders the one screenshot frame: plain text, or SGR escapes at the colour depth and through
+    /// the palette this run resolved.
+    /// </summary>
+    /// <remarks>
+    /// Passing the terminal's own depth and palette rather than the indexed default is what makes
+    /// <c>--screenshot --ansi</c> show what the live terminal is actually sent - so <c>--colors</c>
+    /// and <c>--palette</c> can be inspected without starting the interactive shell.
+    /// </remarks>
+    /// <param name="app">The laid out and drawn application.</param>
+    /// <param name="args">The parsed command line; only <see cref="CommandLineArgs.Ansi"/> is read.</param>
+    /// <returns>The frame text.</returns>
+    internal static string RenderFrame(Application app, CommandLineArgs args)
+    {
+        ArgumentNullException.ThrowIfNull(app);
+        ArgumentNullException.ThrowIfNull(args);
+
+        ScreenBuffer buffer = app.Terminal.Buffer;
+
+        return args.Ansi
+            ? buffer.RenderAnsi(app.Terminal.ColorDepth, app.Terminal.Palette)
+            : buffer.RenderPlainText();
     }
 
     /// <summary>

@@ -102,7 +102,12 @@ public sealed class Application : IAppContext, IDisposable
         ArgumentNullException.ThrowIfNull(args);
 
         Settings settings = Settings.Load();
-        Terminal terminal = Terminal.Create(args.EffectiveWidth, args.EffectiveHeight);
+        Terminal terminal = Terminal.Create(
+            args.EffectiveWidth,
+            args.EffectiveHeight,
+            ResolveColorDepth(args, settings),
+            ResolvePalette(args, settings));
+
         Theme theme = Theme.LoadOrDefault(args.ThemePath ?? settings.ThemePath);
 
         IInputBackend? input = args.Screenshot || terminal.IsHeadless
@@ -112,6 +117,139 @@ public sealed class Application : IAppContext, IDisposable
         var app = new Application(terminal, settings, theme, input);
         app.Initialize(args);
         return app;
+    }
+
+    /// <summary>
+    /// Decides how much colour this run writes, against the real environment. See the injectable
+    /// overload for the precedence.
+    /// </summary>
+    /// <param name="args">The parsed command line.</param>
+    /// <param name="settings">The loaded settings.</param>
+    /// <returns>The colour depth to build the terminal with.</returns>
+    public static ColorDepth ResolveColorDepth(CommandLineArgs args, Settings settings) =>
+        ResolveColorDepth(
+            args,
+            settings,
+            Environment.GetEnvironmentVariable,
+            OutputRedirected(),
+            ColorDepthDetector.PlatformDefault());
+
+    /// <summary>
+    /// Decides how much colour this run writes.
+    /// </summary>
+    /// <param name="args">The parsed command line.</param>
+    /// <param name="settings">The loaded settings.</param>
+    /// <param name="environment">Environment variable lookup; injected so the rules are testable.</param>
+    /// <param name="outputRedirected"><see langword="true"/> when stdout is a pipe or a file.</param>
+    /// <param name="platformDefault">The verdict for a terminal that identifies itself in no way.</param>
+    /// <returns>The colour depth to build the terminal with.</returns>
+    /// <remarks>
+    /// Four steps, most explicit first:
+    /// <list type="number">
+    /// <item>
+    /// <b><c>--colors truecolor</c> or <c>--colors indexed</c>.</b> An instruction given for this
+    /// one run wins over everything, <c>NO_COLOR</c> included - it is the escape hatch in both
+    /// directions, and a user who types it has clearly decided.
+    /// </item>
+    /// <item>
+    /// <b><c>NO_COLOR</c>, present and non-empty</b> (the informal standard at no-color.org).
+    /// Writing literal RGB overrides the colour scheme the user configured, which is exactly what
+    /// that variable declines, so it beats both the saved setting and the detection.
+    /// </item>
+    /// <item>
+    /// <b>The <see cref="Settings.Colors"/> setting</b>, unless <c>--colors auto</c> was given -
+    /// which is how a single run asks for detection despite a saved preference.
+    /// </item>
+    /// <item>
+    /// <b><see cref="ColorDepthDetector"/>.</b> The documented chain of terminal probes.
+    /// </item>
+    /// </list>
+    /// </remarks>
+    public static ColorDepth ResolveColorDepth(
+        CommandLineArgs args,
+        Settings settings,
+        Func<string, string?> environment,
+        bool outputRedirected,
+        ColorDepth platformDefault)
+    {
+        ArgumentNullException.ThrowIfNull(args);
+        ArgumentNullException.ThrowIfNull(settings);
+        ArgumentNullException.ThrowIfNull(environment);
+
+        // 1. An explicit request on this command line, including over NO_COLOR.
+        if (args.Colors is ColorMode.TrueColor)
+        {
+            return ColorDepth.TrueColor;
+        }
+
+        if (args.Colors is ColorMode.Indexed)
+        {
+            return ColorDepth.Indexed16;
+        }
+
+        // 2. NO_COLOR: keep the terminal's own scheme in charge.
+        if (!string.IsNullOrEmpty(environment("NO_COLOR")))
+        {
+            return ColorDepth.Indexed16;
+        }
+
+        // 3. The saved preference - skipped when "--colors auto" asked for detection instead.
+        if (args.Colors is null)
+        {
+            switch (settings.Colors)
+            {
+                case ColorMode.TrueColor:
+                    return ColorDepth.TrueColor;
+
+                case ColorMode.Indexed:
+                    return ColorDepth.Indexed16;
+
+                default:
+                    break;
+            }
+        }
+
+        // 4. "--screenshot --ansi" is a request to render the escapes, not to drive a terminal, so
+        // the detector's verdict about *this* stdout is beside the point - it is always a pipe here,
+        // which would otherwise pin the frame to indexed colour and make the verification hook show
+        // something the live UI never draws. Emit the full-depth frame instead.
+        if (args is { Screenshot: true, Ansi: true })
+        {
+            return ColorDepth.TrueColor;
+        }
+
+        // 5. Ask the terminal what it can do.
+        return ColorDepthDetector.Detect(environment, outputRedirected, platformDefault);
+    }
+
+    /// <summary>
+    /// Loads the palette this run resolves its colours through: <c>--palette</c> if given, otherwise
+    /// the <see cref="Settings.PalettePath"/> setting, otherwise <see cref="Palette.Default"/> - the
+    /// Windows NT table Far installs for itself. Either source may name a built-in preset
+    /// (<c>nt</c>, <c>vga</c>, <c>campbell</c>) instead of a file. A missing or malformed file falls
+    /// back to the built-in one - a broken colour file must never keep you out of your file manager.
+    /// </summary>
+    /// <param name="args">The parsed command line.</param>
+    /// <param name="settings">The loaded settings.</param>
+    /// <returns>The palette.</returns>
+    public static Palette ResolvePalette(CommandLineArgs args, Settings settings)
+    {
+        ArgumentNullException.ThrowIfNull(args);
+        ArgumentNullException.ThrowIfNull(settings);
+
+        return Palette.LoadOrDefault(args.PalettePath ?? settings.PalettePath);
+    }
+
+    private static bool OutputRedirected()
+    {
+        try
+        {
+            return Console.IsOutputRedirected;
+        }
+        catch (IOException)
+        {
+            return true;
+        }
     }
 
     // ------------------------------------------------------------- state

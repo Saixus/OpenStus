@@ -21,6 +21,13 @@ namespace OpenCommander.Core;
 /// is rejected without it rather than silently doing nothing, because a forced size makes the
 /// terminal headless and an interactive run would then paint into a screen no one can see.
 /// </para>
+/// <para>
+/// <c>--colors</c> and <c>--palette</c> are the two halves of the colour question: the first decides
+/// how much colour is written, the second what the 16 slots look like when it is written as RGB.
+/// Both have a persisted counterpart (<see cref="Settings.Colors"/> and
+/// <see cref="Settings.PalettePath"/>) that the command line overrides; see
+/// <see cref="Application.ResolveColorDepth(CommandLineArgs, Settings)"/> for the full precedence.
+/// </para>
 /// </remarks>
 public sealed class CommandLineArgs
 {
@@ -47,6 +54,20 @@ public sealed class CommandLineArgs
 
     /// <summary>A theme file to load instead of the built-in palette, or <see langword="null"/>.</summary>
     public string? ThemePath { get; set; }
+
+    /// <summary>
+    /// The colour depth asked for with <c>--colors</c>, or <see langword="null"/> when the option was
+    /// absent - which is not the same as <see cref="ColorMode.Auto"/>: an absent option defers to the
+    /// <see cref="Settings.Colors"/> setting, while an explicit <c>--colors auto</c> overrides it and
+    /// asks for detection.
+    /// </summary>
+    public ColorMode? Colors { get; set; }
+
+    /// <summary>
+    /// A palette file giving the RGB behind the 16 colour slots, or <see langword="null"/>. Only
+    /// consulted in <see cref="Rendering.ColorDepth.TrueColor"/>.
+    /// </summary>
+    public string? PalettePath { get; set; }
 
     /// <summary>Render exactly one frame to stdout and exit, without touching the real console.</summary>
     public bool Screenshot { get; set; }
@@ -99,7 +120,11 @@ public sealed class CommandLineArgs
         Options:
           --left <path>          initial left panel folder
           --right <path>         initial right panel folder
-          --theme <file.json>    palette file to load instead of the built-in one
+          --theme <file.json>    theme file: which colour each element uses
+          --colors <mode>        auto (the default), truecolor or indexed;
+                                 indexed keeps the terminal's own colour scheme
+          --palette <file.json>  RGB values for the 16 colour slots, used by
+                                 truecolor (the default is the classic VGA one)
           --view <1-9>           initial view mode for both panels
                                  1 Brief  2 Medium  3 Full  4 Wide  5 Detailed
           --screenshot           render one frame to stdout and exit, without
@@ -213,6 +238,30 @@ public sealed class CommandLineArgs
                     parsed.ThemePath = theme;
                     break;
 
+                case "colors" or "colours":
+                    if (!TryTakeValue(args, ref i, inlineValue, name, parsed, out string? colors))
+                    {
+                        return parsed;
+                    }
+
+                    if (!TryParseColorMode(colors, out ColorMode colorMode))
+                    {
+                        parsed.Error = "--colors expects auto, truecolor or indexed";
+                        return parsed;
+                    }
+
+                    parsed.Colors = colorMode;
+                    break;
+
+                case "palette":
+                    if (!TryTakeValue(args, ref i, inlineValue, name, parsed, out string? palette))
+                    {
+                        return parsed;
+                    }
+
+                    parsed.PalettePath = palette;
+                    break;
+
                 case "size":
                     if (!TryTakeValue(args, ref i, inlineValue, name, parsed, out string? size))
                     {
@@ -301,6 +350,40 @@ public sealed class CommandLineArgs
         width = w;
         height = h;
         return true;
+    }
+
+    /// <summary>
+    /// Parses a <c>--colors</c> mode.
+    /// </summary>
+    /// <remarks>
+    /// The documented spellings are <c>auto</c>, <c>truecolor</c> and <c>indexed</c>; the handful of
+    /// aliases below are the words a user is likely to reach for instead (the British spelling, the
+    /// <c>COLORTERM</c> spelling, the colour count). This is also what the <c>colors</c> entry of the
+    /// settings file is read with, so the file and the command line cannot drift apart.
+    /// </remarks>
+    /// <param name="text">The value as written on the command line or in the settings file.</param>
+    /// <param name="mode">Receives the mode; <see cref="ColorMode.Auto"/> when parsing failed.</param>
+    /// <returns><see langword="true"/> when the text named a mode.</returns>
+    public static bool TryParseColorMode(string? text, out ColorMode mode)
+    {
+        switch (text?.Trim().ToLowerInvariant())
+        {
+            case "auto" or "detect" or "default":
+                mode = ColorMode.Auto;
+                return true;
+
+            case "truecolor" or "truecolour" or "true-color" or "24bit" or "rgb":
+                mode = ColorMode.TrueColor;
+                return true;
+
+            case "indexed" or "index" or "16" or "16color" or "ansi16":
+                mode = ColorMode.Indexed;
+                return true;
+
+            default:
+                mode = ColorMode.Auto;
+                return false;
+        }
     }
 
     private static bool IsOption(string arg) =>

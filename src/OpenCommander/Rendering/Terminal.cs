@@ -48,6 +48,7 @@ public sealed class Terminal : IDisposable
     private readonly StringBuilder _frame = new(16 * 1024);
 
     private ScreenBuffer _buffer;
+    private Palette _palette;
     private Cell[] _front;
     private int _frontWidth;
     private int _frontHeight;
@@ -88,6 +89,8 @@ public sealed class Terminal : IDisposable
         bool forcedSize,
         int width,
         int height,
+        ColorDepth depth,
+        Palette palette,
         nint hOut,
         nint hIn,
         uint savedOutMode,
@@ -97,6 +100,8 @@ public sealed class Terminal : IDisposable
     {
         IsHeadless = headless;
         _forcedSize = forcedSize;
+        ColorDepth = depth;
+        _palette = palette;
         _hOut = hOut;
         _hIn = hIn;
         _savedOutMode = savedOutMode;
@@ -127,7 +132,23 @@ public sealed class Terminal : IDisposable
     /// headless: nothing is written to the console, the buffer is only kept in memory. That is
     /// the mode <c>--screenshot</c> uses.
     /// </summary>
-    public static Terminal Create(int? forcedWidth = null, int? forcedHeight = null)
+    /// <param name="forcedWidth">Width in cells, or <see langword="null"/> to use the console's.</param>
+    /// <param name="forcedHeight">Height in cells, or <see langword="null"/> to use the console's.</param>
+    /// <param name="forcedDepth">
+    /// Overrides the colour depth. <see langword="null"/> auto-detects with
+    /// <see cref="ColorDepthDetector.Detect(Func{string, string?}, bool, ColorDepth)"/> - except
+    /// for a headless terminal, which stays <see cref="ColorDepth.Indexed16"/> so that screenshots
+    /// are reproducible on any machine rather than varying with the environment that took them.
+    /// </param>
+    /// <param name="palette">
+    /// The RGB table used in <see cref="ColorDepth.TrueColor"/>; defaults to
+    /// <see cref="Palette.ClassicVga"/>.
+    /// </param>
+    public static Terminal Create(
+        int? forcedWidth = null,
+        int? forcedHeight = null,
+        ColorDepth? forcedDepth = null,
+        Palette? palette = null)
     {
         bool forcedSize = forcedWidth.HasValue || forcedHeight.HasValue;
         bool redirected = SafeIsOutputRedirected();
@@ -136,6 +157,10 @@ public sealed class Terminal : IDisposable
         (int consoleW, int consoleH) = ReadConsoleSize();
         int width = Math.Max(1, forcedWidth ?? (forcedSize ? DefaultWidth : consoleW));
         int height = Math.Max(1, forcedHeight ?? (forcedSize ? DefaultHeight : consoleH));
+
+        ColorDepth depth = forcedDepth ?? (headless
+            ? ColorDepth.Indexed16
+            : ColorDepthDetector.Detect(Environment.GetEnvironmentVariable, redirected, ColorDepthDetector.PlatformDefault()));
 
         nint hOut = 0;
         nint hIn = 0;
@@ -149,7 +174,19 @@ public sealed class Terminal : IDisposable
             (hOut, hIn, savedOut, haveOut, savedIn, haveIn) = EnableWindowsVirtualTerminal();
         }
 
-        var terminal = new Terminal(headless, forcedSize, width, height, hOut, hIn, savedOut, haveOut, savedIn, haveIn);
+        var terminal = new Terminal(
+            headless,
+            forcedSize,
+            width,
+            height,
+            depth,
+            palette ?? Palette.ClassicVga,
+            hOut,
+            hIn,
+            savedOut,
+            haveOut,
+            savedIn,
+            haveIn);
 
         if (!headless)
         {
@@ -175,6 +212,39 @@ public sealed class Terminal : IDisposable
     /// in memory (forced size, or stdout redirected).
     /// </summary>
     public bool IsHeadless { get; }
+
+    /// <summary>
+    /// How colours are written: the terminal's own 16 slots, or literal RGB resolved through
+    /// <see cref="Palette"/>. Fixed for the life of the terminal - it is decided once by
+    /// <see cref="Create"/>, from the caller's override or from
+    /// <see cref="ColorDepthDetector"/>.
+    /// </summary>
+    public ColorDepth ColorDepth { get; }
+
+    /// <summary>
+    /// The RGB table used in <see cref="Rendering.ColorDepth.TrueColor"/>. Assigning a new palette
+    /// repaints the whole screen, so a palette can be swapped at run time. Ignored entirely in
+    /// <see cref="Rendering.ColorDepth.Indexed16"/>, where the terminal's own scheme is in charge.
+    /// </summary>
+    public Palette Palette
+    {
+        get => _palette;
+        set
+        {
+            ArgumentNullException.ThrowIfNull(value);
+
+            lock (_sync)
+            {
+                if (ReferenceEquals(_palette, value))
+                {
+                    return;
+                }
+
+                _palette = value;
+                _forceFull = true;
+            }
+        }
+    }
 
     /// <summary>
     /// Re-reads the console size and resizes <see cref="Buffer"/> when it changed. Cheap enough
@@ -324,7 +394,9 @@ public sealed class Terminal : IDisposable
 
                     if (!haveStyle || back.Style != lastStyle)
                     {
-                        ScreenBuffer.AppendSgr(sb, back.Style);
+                        // The only per-frame cost of true colour: this runs on style changes
+                        // only, which the diff has already decided are worth writing bytes for.
+                        ScreenBuffer.AppendSgr(sb, back.Style, ColorDepth, _palette);
                         lastStyle = back.Style;
                         haveStyle = true;
                     }
