@@ -1,0 +1,1510 @@
+using System.Globalization;
+using OpenCommander.Core;
+using OpenCommander.Files;
+using OpenCommander.Input;
+using OpenCommander.Rendering;
+using OpenCommander.Theming;
+using OpenCommander.Ui;
+
+namespace OpenCommander.Panels;
+
+/// <summary>
+/// One of the two file panels: the directory listing, the cursor, the tag marks, and the drawing and
+/// key handling that go with them.
+/// </summary>
+/// <remarks>
+/// <para>
+/// <b>Geometry.</b> A panel of height <c>h</c> is drawn as a top frame carrying the centred path, a
+/// column title row, <c>h - 5</c> file rows, a separator, the status line for the entry under the
+/// cursor, and a bottom frame carrying the centred totals. Switching the status line off
+/// (<see cref="Settings.ShowStatusBar"/>) hands its two rows to the file area and nothing else moves.
+/// </para>
+/// <para>
+/// <b>Fill order.</b> Entries fill the stripes newspaper style: down the first stripe, then down the
+/// next. The visible window therefore holds <c>rows * stripes</c> entries, Left and Right move the
+/// cursor by one whole stripe (which in a single-stripe mode is exactly one screenful), and the panel
+/// scrolls one row at a time when the cursor walks off the bottom.
+/// </para>
+/// <para>
+/// <b>Cursor and scroll are independent.</b> Moving the cursor pulls the window along, but the mouse
+/// wheel scrolls the window on its own and leaves the cursor where it is - the same as Far. Both are
+/// clamped on every frame, so resizing the panel can never leave either one out of range.
+/// </para>
+/// </remarks>
+public sealed class FilePanel : IFilePanel
+{
+    /// <summary>The narrowest panel that still gets drawn; anything smaller is painted blank.</summary>
+    public const int MinWidth = 4;
+
+    /// <summary>The shortest panel that still gets drawn; anything smaller is painted blank.</summary>
+    public const int MinHeight = 5;
+
+    /// <summary>How many rows one wheel notch scrolls.</summary>
+    public const int WheelRows = 3;
+
+    private const BoxStyle Frame = BoxStyle.Single;
+    private const string DateFormat = "MM/dd/yy";
+    private const string TimeFormat = "HH:mm";
+
+    private readonly Settings _ownSettings = new();
+    private readonly PanelHistory _history = new();
+    private readonly QuickSearch _quickSearch = new();
+
+    private List<FileEntry> _entries = [];
+    private PanelColumnLayout? _layoutCache;
+    private PanelViewMode _viewMode = PanelViewModes.Default;
+    private string _path;
+    private string? _error;
+    private int _cursor;
+    private int _top;
+    private int _fileCount;
+    private int _directoryCount;
+    private long _totalBytes;
+    private bool? _shiftSelection;
+
+    /// <summary>Creates a panel.</summary>
+    /// <param name="ctx">
+    /// The application context, or <see langword="null"/> when the panel is built before the shell
+    /// exists. Without it the panel falls back to its own default <see cref="Settings"/> and simply
+    /// ignores the commands that need the shell (running a file, prompting for a mask).
+    /// </param>
+    /// <param name="theme">The palette to draw with.</param>
+    /// <param name="isLeft">Whether this is the left panel.</param>
+    /// <remarks>
+    /// The constructor does no disk I/O: the listing stays empty until the first
+    /// <see cref="Navigate"/> or <see cref="Reload"/>.
+    /// </remarks>
+    public FilePanel(IAppContext? ctx, Theme theme, bool isLeft)
+    {
+        ArgumentNullException.ThrowIfNull(theme);
+
+        Context = ctx;
+        Theme = theme;
+        IsLeft = isLeft;
+        _path = SafeCurrentDirectory();
+    }
+
+    /// <summary>The application context; the shell assigns it when the panel was built before it.</summary>
+    public IAppContext? Context { get; set; }
+
+    /// <summary>The palette used for drawing.</summary>
+    public Theme Theme { get; set; }
+
+    /// <summary>Whether this is the left panel.</summary>
+    public bool IsLeft { get; }
+
+    /// <inheritdoc/>
+    public Rect Bounds { get; set; }
+
+    /// <inheritdoc/>
+    public bool IsActive { get; set; }
+
+    /// <inheritdoc/>
+    public bool IsVisible { get; set; } = true;
+
+    /// <inheritdoc/>
+    public string CurrentPath => _path;
+
+    /// <inheritdoc/>
+    public FileEntry? Current =>
+        (uint)_cursor < (uint)_entries.Count ? _entries[_cursor] : null;
+
+    /// <inheritdoc/>
+    public IReadOnlyList<FileEntry> Entries => _entries;
+
+    /// <inheritdoc/>
+    public IReadOnlyList<FileEntry> SelectedOrCurrent
+    {
+        get
+        {
+            if (HasSelection)
+            {
+                var tagged = new List<FileEntry>();
+                foreach (FileEntry e in _entries)
+                {
+                    if (e.Selected)
+                    {
+                        tagged.Add(e);
+                    }
+                }
+
+                return tagged;
+            }
+
+            FileEntry? current = Current;
+            return current is null || current.IsParent ? [] : [current];
+        }
+    }
+
+    /// <inheritdoc/>
+    public bool HasSelection
+    {
+        get
+        {
+            foreach (FileEntry e in _entries)
+            {
+                if (e.Selected)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
+
+    /// <summary>The view mode (Ctrl+1..Ctrl+9).</summary>
+    public PanelViewMode ViewMode
+    {
+        get => _viewMode;
+        set => _viewMode = PanelViewModes.Normalize(value);
+    }
+
+    /// <summary>The sort key (Ctrl+F3..Ctrl+F11).</summary>
+    public SortMode SortMode { get; private set; } = Files.SortMode.Name;
+
+    /// <summary>Whether the sort key is inverted; pressing the same sort accelerator twice toggles it.</summary>
+    public bool ReverseSort { get; private set; }
+
+    /// <summary>The index of the entry under the cursor.</summary>
+    public int CursorIndex
+    {
+        get => _cursor;
+        set => SetCursor(value);
+    }
+
+    /// <summary>The index of the first entry in the visible window.</summary>
+    public int TopIndex => _top;
+
+    /// <summary>Why the directory could not be read, or <see langword="null"/>.</summary>
+    public string? Error => _error;
+
+    /// <summary>The directories this panel has shown, most recently visited first.</summary>
+    public IReadOnlyList<string> History => _history.Items;
+
+    /// <summary>The fast find state; exposed so the shell can show whether a search is running.</summary>
+    public QuickSearch Search => _quickSearch;
+
+    /// <summary>How many file rows the panel currently has; zero when it is too short to show any.</summary>
+    public int VisibleRows
+    {
+        get
+        {
+            Rect b = Bounds;
+            if (b.Width < MinWidth || b.Height < MinHeight)
+            {
+                return 0;
+            }
+
+            return Math.Max(0, LastFileRow(b) - (b.Y + 2) + 1);
+        }
+    }
+
+    /// <summary>How many stripes the current view mode and width produce.</summary>
+    public int VisibleStripes => LayoutFor(Math.Max(0, Bounds.Width - 2)).Stripes;
+
+    /// <summary>How many entries fit on screen at once; never less than one.</summary>
+    public int PageSize => Math.Max(1, VisibleRows * VisibleStripes);
+
+    private Settings Settings => Context?.Settings ?? _ownSettings;
+
+    private bool ShowStatusBar => Settings.ShowStatusBar;
+
+    private int RowStep => Math.Max(1, VisibleRows);
+
+    private static StringComparison NameComparison =>
+        OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+
+    /// <summary>Records a visit in the folder history, moving it to the front when already known.</summary>
+    /// <param name="path">The directory that was visited.</param>
+    public void PushHistory(string path) => _history.Push(path);
+
+    /// <inheritdoc/>
+    public void Navigate(string path, string? focusName = null)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return;
+        }
+
+        _path = FileSystemProvider.NormalizeDisplayPath(path);
+        _quickSearch.Cancel();
+        _shiftSelection = null;
+        _top = 0;
+        Load(focusName);
+        _history.Push(_path);
+    }
+
+    /// <inheritdoc/>
+    public void Reload(bool keepPosition = true)
+    {
+        string? focus = keepPosition ? Current?.Name : null;
+        int top = _top;
+        _quickSearch.Cancel();
+        _shiftSelection = null;
+        Load(focus);
+
+        if (keepPosition)
+        {
+            _top = top;
+            EnsureVisible();
+        }
+    }
+
+    /// <inheritdoc/>
+    public void ClearSelection()
+    {
+        foreach (FileEntry e in _entries)
+        {
+            e.Selected = false;
+        }
+    }
+
+    /// <summary>
+    /// Changes the sort key. Asking for the key that is already active toggles the direction, exactly
+    /// like pressing Ctrl+F3 twice in Far.
+    /// </summary>
+    /// <param name="mode">The sort key.</param>
+    public void SetSort(SortMode mode)
+    {
+        if (mode == SortMode)
+        {
+            ReverseSort = !ReverseSort;
+        }
+        else
+        {
+            SortMode = mode;
+            ReverseSort = false;
+        }
+
+        Resort();
+    }
+
+    /// <summary>Sets the sort key and direction outright.</summary>
+    /// <param name="mode">The sort key.</param>
+    /// <param name="reverse">Whether the key is inverted.</param>
+    public void SetSort(SortMode mode, bool reverse)
+    {
+        SortMode = mode;
+        ReverseSort = reverse;
+        Resort();
+    }
+
+    /// <summary>Tags or untags every entry matching a mask list.</summary>
+    /// <param name="maskList">A comma or semicolon separated mask list, e.g. <c>"*.cs,*.md"</c>.</param>
+    /// <param name="selected">Whether to tag or untag.</param>
+    /// <returns>How many entries changed.</returns>
+    public int SelectByMask(string? maskList, bool selected)
+    {
+        if (string.IsNullOrWhiteSpace(maskList))
+        {
+            return 0;
+        }
+
+        int changed = 0;
+        foreach (FileEntry e in _entries)
+        {
+            if (e.IsParent || e.IsDirectory || e.Selected == selected)
+            {
+                continue;
+            }
+
+            if (FileMask.IsMatchAny(e.Name, maskList))
+            {
+                e.Selected = selected;
+                changed++;
+            }
+        }
+
+        return changed;
+    }
+
+    /// <summary>Flips the tag on every entry.</summary>
+    /// <param name="includeDirectories">
+    /// When set, directories are flipped too (Ctrl+Gray*); otherwise only files are (Gray*).
+    /// </param>
+    public void InvertSelection(bool includeDirectories)
+    {
+        foreach (FileEntry e in _entries)
+        {
+            if (e.IsParent || (!includeDirectories && e.IsDirectory))
+            {
+                continue;
+            }
+
+            e.Selected = !e.Selected;
+        }
+    }
+
+    /// <summary>Tags every file, leaving directories and <c>".."</c> alone (Ctrl+A).</summary>
+    public void SelectAllFiles()
+    {
+        foreach (FileEntry e in _entries)
+        {
+            if (!e.IsParent && !e.IsDirectory)
+            {
+                e.Selected = true;
+            }
+        }
+    }
+
+    /// <summary>Tags or untags every entry sharing the extension of the entry under the cursor.</summary>
+    /// <param name="selected">Whether to tag or untag.</param>
+    /// <returns>How many entries changed.</returns>
+    public int SelectSameExtension(bool selected)
+    {
+        FileEntry? current = Current;
+        if (current is null || current.IsParent)
+        {
+            return 0;
+        }
+
+        string extension = current.Extension;
+        int changed = 0;
+        foreach (FileEntry e in _entries)
+        {
+            if (e.IsParent || e.IsDirectory || e.Selected == selected)
+            {
+                continue;
+            }
+
+            if (string.Equals(e.Extension, extension, StringComparison.Ordinal))
+            {
+                e.Selected = selected;
+                changed++;
+            }
+        }
+
+        return changed;
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The captions live in <see cref="KeyBarSets"/> and nowhere else: the panel only picks the row
+    /// for the modifiers currently held, so the bar the shell draws and the table the help screen
+    /// reads can never drift apart.
+    /// </remarks>
+    public KeyBarLabels? KeyBarFor(KeyMods mods) => KeyBarSets.ForPanels(mods);
+
+    // ---------------------------------------------------------------- drawing
+
+    /// <inheritdoc/>
+    public void Draw(ScreenBuffer buffer)
+    {
+        ArgumentNullException.ThrowIfNull(buffer);
+
+        if (!IsVisible)
+        {
+            return;
+        }
+
+        Rect b = Bounds;
+        if (b.IsEmpty)
+        {
+            return;
+        }
+
+        if (b.Width < MinWidth || b.Height < MinHeight)
+        {
+            buffer.Fill(b, ' ', Theme.PanelText);
+            return;
+        }
+
+        int x = b.X;
+        int y = b.Y;
+        int w = b.Width;
+        int h = b.Height;
+        int inner = w - 2;
+        int firstRow = y + 2;
+        int lastRow = LastFileRow(b);
+        int rows = Math.Max(0, lastRow - firstRow + 1);
+        PanelColumnLayout layout = LayoutFor(inner);
+        int stripes = layout.Stripes;
+        int page = Math.Max(1, rows * stripes);
+
+        ClampScroll(page);
+
+        CellStyle box = IsActive ? Theme.PanelBoxActive : Theme.PanelBox;
+
+        buffer.Fill(b, ' ', Theme.PanelText);
+        DrawFrame(buffer, b, lastRow, box);
+        DrawTitle(buffer, b);
+
+        char vertical = BoxChars.Vertical(Frame);
+        foreach (int sep in layout.Separators)
+        {
+            buffer.VLine(x + 1 + sep, y + 1, rows + 1, vertical, box);
+        }
+
+        foreach (PanelColumn column in layout.Columns)
+        {
+            buffer.WriteFixed(
+                x + 1 + column.X,
+                y + 1,
+                column.Width,
+                column.Header,
+                Theme.PanelColumnTitle,
+                HAlign.Center);
+        }
+
+        if (rows > 0)
+        {
+            if (_error is not null)
+            {
+                buffer.WriteFixed(
+                    x + 1,
+                    firstRow + (rows / 2),
+                    inner,
+                    _error,
+                    Theme.PanelEmpty,
+                    HAlign.Center);
+            }
+            else
+            {
+                DrawEntries(buffer, b, layout, firstRow, rows, box);
+            }
+
+            DrawScrollBar(buffer, b, firstRow, rows, page);
+        }
+
+        if (ShowStatusBar)
+        {
+            DrawStatusLine(buffer, b);
+        }
+
+        DrawTotals(buffer, b);
+        _quickSearch.Draw(buffer, x + 1, y + h - 1, inner, Theme.QuickSearch);
+    }
+
+    private void DrawFrame(ScreenBuffer buffer, Rect b, int lastRow, CellStyle box)
+    {
+        int x = b.X;
+        int y = b.Y;
+        int w = b.Width;
+        int inner = w - 2;
+        int right = x + w - 1;
+        int bottom = y + b.Height - 1;
+        char horizontal = BoxChars.Horizontal(Frame);
+        char vertical = BoxChars.Vertical(Frame);
+
+        buffer.Set(x, y, BoxChars.TopLeft(Frame), box);
+        buffer.HLine(x + 1, y, inner, horizontal, box);
+        buffer.Set(right, y, BoxChars.TopRight(Frame), box);
+
+        for (int row = y + 1; row <= lastRow; row++)
+        {
+            buffer.Set(x, row, vertical, box);
+            buffer.Set(right, row, vertical, box);
+        }
+
+        if (ShowStatusBar)
+        {
+            int separator = bottom - 2;
+            buffer.Set(x, separator, BoxChars.LeftTee(Frame), box);
+            buffer.HLine(x + 1, separator, inner, horizontal, box);
+            buffer.Set(right, separator, BoxChars.RightTee(Frame), box);
+        }
+
+        buffer.Set(x, bottom, BoxChars.BottomLeft(Frame), box);
+        buffer.HLine(x + 1, bottom, inner, horizontal, box);
+        buffer.Set(right, bottom, BoxChars.BottomRight(Frame), box);
+    }
+
+    private void DrawTitle(ScreenBuffer buffer, Rect b)
+    {
+        int available = b.Width - 4;
+        if (available < 3)
+        {
+            return;
+        }
+
+        string path = FileSystemProvider.NormalizeDisplayPath(CurrentPath);
+        int maxPath = available - 2;
+        if (path.Length > maxPath)
+        {
+            // Long paths lose their head, not their tail: the folder you are in matters most.
+            path = ScreenBuffer.Ellipsis + path[^(maxPath - 1)..];
+        }
+
+        string title = " " + path + " ";
+        CellStyle style = IsActive ? Theme.PanelTitleActive : Theme.PanelTitle;
+        buffer.Write(b.X + ((b.Width - title.Length) / 2), b.Y, title, style);
+    }
+
+    private void DrawEntries(
+        ScreenBuffer buffer,
+        Rect b,
+        PanelColumnLayout layout,
+        int firstRow,
+        int rows,
+        CellStyle box)
+    {
+        int left = b.X + 1;
+        int count = _entries.Count;
+        int fields = layout.FieldsPerStripe;
+        char vertical = BoxChars.Vertical(Frame);
+
+        for (int s = 0; s < layout.Stripes; s++)
+        {
+            for (int r = 0; r < rows; r++)
+            {
+                int index = _top + (s * rows) + r;
+                if (index >= count)
+                {
+                    break;
+                }
+
+                FileEntry entry = _entries[index];
+                bool onCursor = IsActive && index == _cursor;
+                CellStyle style = StyleFor(entry, onCursor);
+                int rowY = firstRow + r;
+
+                for (int f = 0; f < fields; f++)
+                {
+                    PanelColumn column = layout.Column(s, f);
+                    if (f > 0)
+                    {
+                        // Far recolours the dividers that fall inside the cursor row so the bar
+                        // reads as one unbroken block; the dividers *between* stripes keep the
+                        // frame colour and are left alone.
+                        buffer.Set(left + column.X - 1, rowY, vertical, onCursor ? style : box);
+                    }
+
+                    buffer.WriteFixed(
+                        left + column.X,
+                        rowY,
+                        column.Width,
+                        CellText(entry, column.Kind),
+                        style,
+                        column.Align);
+                }
+            }
+        }
+    }
+
+    private void DrawScrollBar(ScreenBuffer buffer, Rect b, int firstRow, int rows, int page)
+    {
+        int count = _entries.Count;
+        if (count <= page || rows <= 0)
+        {
+            return;
+        }
+
+        int thumb = Math.Clamp((int)((long)rows * page / count), 1, rows);
+        int maxTop = count - page;
+        int pos = maxTop <= 0 ? 0 : (int)((long)(rows - thumb) * _top / maxTop);
+        pos = Math.Clamp(pos, 0, rows - thumb);
+
+        int sx = b.X + b.Width - 1;
+        for (int i = 0; i < rows; i++)
+        {
+            char glyph = i >= pos && i < pos + thumb ? BoxChars.ScrollBarThumb : BoxChars.ScrollBarTrack;
+            buffer.Set(sx, firstRow + i, glyph, Theme.PanelScrollBar);
+        }
+    }
+
+    private void DrawStatusLine(ScreenBuffer buffer, Rect b)
+    {
+        int row = b.Y + b.Height - 2;
+        buffer.Fill(new Rect(b.X, row, b.Width, 1), ' ', Theme.PanelStatus);
+
+        FileEntry? current = Current;
+        if (current is null || b.Width < 4)
+        {
+            return;
+        }
+
+        // The name keeps its single leading space; the size/date/time block is flush with the
+        // panel's last column, so the two blocks bracket the row exactly as the layout wants.
+        int nameX = b.X + 1;
+        int lastX = b.X + b.Width - 1;
+        string right = StatusRightText(current);
+        int rightWidth = Math.Min(right.Length, b.Width - 1);
+        int rightX = lastX - rightWidth + 1;
+        int nameWidth = Math.Max(0, rightX - nameX - 1);
+
+        buffer.WriteFixed(nameX, row, nameWidth, current.Name, Theme.PanelStatusFile);
+        buffer.WriteFixed(rightX, row, rightWidth, right, Theme.PanelStatus, HAlign.Right);
+    }
+
+    private void DrawTotals(ScreenBuffer buffer, Rect b)
+    {
+        string totals = " " + TotalsText() + " ";
+        int row = b.Y + b.Height - 1;
+        int available = b.Width - 2;
+
+        if (totals.Length > available)
+        {
+            buffer.WriteFixed(b.X + 1, row, available, totals, Theme.PanelTotals, HAlign.Center);
+            return;
+        }
+
+        buffer.Write(b.X + ((b.Width - totals.Length) / 2), row, totals, Theme.PanelTotals);
+    }
+
+    /// <summary>
+    /// The totals string drawn on the bottom frame: the whole listing normally, and the tagged
+    /// entries as soon as anything is tagged.
+    /// </summary>
+    /// <returns>The text, without the space padding the frame adds.</returns>
+    public string TotalsText()
+    {
+        long bytes = 0;
+        int files = 0;
+        int folders = 0;
+        bool selection = false;
+
+        foreach (FileEntry e in _entries)
+        {
+            if (!e.Selected)
+            {
+                continue;
+            }
+
+            selection = true;
+            if (e.IsDirectory)
+            {
+                folders++;
+            }
+            else
+            {
+                files++;
+                bytes += e.Size;
+            }
+        }
+
+        if (selection)
+        {
+            return string.Create(
+                CultureInfo.InvariantCulture,
+                $"Selected: {SizeFormatter.Short(bytes)}, files: {files}, folders: {folders}");
+        }
+
+        return string.Create(
+            CultureInfo.InvariantCulture,
+            $"Bytes: {SizeFormatter.Short(_totalBytes)}, files: {_fileCount}, folders: {_directoryCount}");
+    }
+
+    /// <summary>The right hand block of the status line: size, date and time, two spaces apart.</summary>
+    /// <param name="entry">The entry under the cursor.</param>
+    /// <returns>The text.</returns>
+    public static string StatusRightText(FileEntry entry)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+
+        string size = DirectoryMarker(entry) ?? SizeFormatter.Grouped(entry.Size);
+        string date = entry.Modified.ToString(DateFormat, CultureInfo.InvariantCulture);
+        string time = entry.Modified.ToString(TimeFormat, CultureInfo.InvariantCulture);
+        return string.Create(CultureInfo.InvariantCulture, $"{size}  {date}  {time}");
+    }
+
+    /// <summary>The text one column shows for one entry.</summary>
+    /// <param name="entry">The entry.</param>
+    /// <param name="kind">The column kind.</param>
+    /// <returns>The text, name columns included with their one leading space of padding.</returns>
+    public static string CellText(FileEntry entry, PanelColumnKind kind)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+
+        return kind switch
+        {
+            PanelColumnKind.Size => SizeCellText(entry),
+            PanelColumnKind.Date => entry.Modified.ToString(DateFormat, CultureInfo.InvariantCulture),
+            PanelColumnKind.Time => entry.Modified.ToString(TimeFormat, CultureInfo.InvariantCulture),
+            PanelColumnKind.Attributes => entry.AttributeString,
+            _ => " " + entry.Name,
+        };
+    }
+
+    /// <summary>
+    /// The word a directory shows where a file shows its size: <c>"Up"</c>, <c>"Folder"</c> or
+    /// <c>"Symlink"</c>, and <see langword="null"/> for anything that really has a byte count.
+    /// </summary>
+    /// <param name="entry">The entry.</param>
+    /// <returns>The marker, or <see langword="null"/> for a plain file.</returns>
+    /// <remarks>
+    /// The Size column and the status line both go through here, so the two can never end up
+    /// disagreeing about the same entry. The column adds the angle brackets, the status line does
+    /// not; the word itself is decided in exactly one place.
+    /// </remarks>
+    private static string? DirectoryMarker(FileEntry entry)
+    {
+        if (entry.IsParent)
+        {
+            return "Up";
+        }
+
+        if (!entry.IsDirectory)
+        {
+            return null;
+        }
+
+        return entry.IsReparsePoint ? "Symlink" : "Folder";
+    }
+
+    private static string SizeCellText(FileEntry entry)
+    {
+        // No padding inside the brackets: the column is right aligned, so letting HAlign.Right do
+        // the work is what keeps "<Up>" flush with the byte counts above and below it.
+        string? marker = DirectoryMarker(entry);
+        if (marker is not null)
+        {
+            return "<" + marker + ">";
+        }
+
+        // The exact byte count while it fits the column, the compact form once it does not - which
+        // is the same rule Far applies to the totals line.
+        string exact = SizeFormatter.Grouped(entry.Size);
+        return exact.Length <= PanelColumn.SizeWidth ? exact : SizeFormatter.Short(entry.Size);
+    }
+
+    /// <summary>
+    /// Picks the colour for one entry, in the fixed precedence
+    /// cursor &gt; tagged &gt; directory &gt; hidden or system &gt; archive &gt; executable &gt; plain file.
+    /// </summary>
+    /// <param name="entry">The entry.</param>
+    /// <param name="onCursor">Whether the entry is under the cursor of the focused panel.</param>
+    /// <returns>The style.</returns>
+    public CellStyle StyleFor(FileEntry entry, bool onCursor)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+
+        if (onCursor)
+        {
+            return entry.Selected ? Theme.PanelCursorSelected : Theme.PanelCursor;
+        }
+
+        if (entry.Selected)
+        {
+            return Theme.PanelSelectedFile;
+        }
+
+        if (entry.IsDirectory)
+        {
+            return Theme.PanelDirectory;
+        }
+
+        if (entry.IsHidden)
+        {
+            return Theme.PanelHidden;
+        }
+
+        if (entry.IsArchive)
+        {
+            return Theme.PanelArchive;
+        }
+
+        return entry.IsExecutable ? Theme.PanelExecutable : Theme.PanelText;
+    }
+
+    // ------------------------------------------------------------ key handling
+
+    /// <inheritdoc/>
+    public bool HandleKey(KeyEvent key, IAppContext ctx)
+    {
+        IAppContext? app = ctx ?? Context;
+        KeyMods mods = key.Mods;
+
+        if ((mods & KeyMods.Shift) == 0)
+        {
+            // Far decides select-versus-deselect once per Shift gesture; any other key ends it.
+            _shiftSelection = null;
+        }
+
+        _quickSearch.ExpireIfIdle(DateTime.UtcNow);
+
+        if (HandleQuickSearchKey(key))
+        {
+            return true;
+        }
+
+        if (StartsQuickSearch(key))
+        {
+            _quickSearch.Append(key.Ch, DateTime.UtcNow);
+            JumpToQuickSearchMatch(_cursor);
+            return true;
+        }
+
+        bool none = mods == KeyMods.None;
+        bool shift = mods == KeyMods.Shift;
+        bool ctrl = mods == KeyMods.Ctrl;
+
+        if (ctrl && (key.Key == ConsoleKey.Oem5 || key.Ch == '\\' || key.Ch == '\u001c'))
+        {
+            Navigate(FileSystemProvider.GetRoot(CurrentPath));
+            return true;
+        }
+
+        switch (key.Key)
+        {
+            case ConsoleKey.UpArrow when none:
+                return MoveTo(_cursor - 1);
+            case ConsoleKey.UpArrow when shift:
+                return ShiftMove(_cursor - 1, inclusive: false);
+
+            case ConsoleKey.DownArrow when none:
+                return MoveTo(_cursor + 1);
+            case ConsoleKey.DownArrow when shift:
+                return ShiftMove(_cursor + 1, inclusive: false);
+
+            case ConsoleKey.LeftArrow when none:
+                return MoveTo(_cursor - RowStep);
+            case ConsoleKey.LeftArrow when shift:
+                return ShiftMove(_cursor - RowStep, inclusive: false);
+
+            case ConsoleKey.RightArrow when none:
+                return MoveTo(_cursor + RowStep);
+            case ConsoleKey.RightArrow when shift:
+                return ShiftMove(_cursor + RowStep, inclusive: false);
+
+            case ConsoleKey.Home when none:
+                return MoveTo(0);
+            case ConsoleKey.Home when shift:
+                return ShiftMove(0, inclusive: true);
+
+            case ConsoleKey.End when none:
+                return MoveTo(_entries.Count - 1);
+            case ConsoleKey.End when shift:
+                return ShiftMove(_entries.Count - 1, inclusive: true);
+
+            case ConsoleKey.PageUp when none:
+                return MoveTo(_cursor - PageSize);
+            case ConsoleKey.PageUp when shift:
+                return ShiftMove(_cursor - PageSize, inclusive: false);
+            case ConsoleKey.PageUp when ctrl:
+                GoToParent();
+                return true;
+
+            case ConsoleKey.PageDown when none:
+                return MoveTo(_cursor + PageSize);
+            case ConsoleKey.PageDown when shift:
+                return ShiftMove(_cursor + PageSize, inclusive: false);
+            case ConsoleKey.PageDown when ctrl:
+                EnterCurrentDirectory();
+                return true;
+
+            case ConsoleKey.Enter when none:
+                Activate(app);
+                return true;
+            case ConsoleKey.Enter when ctrl:
+                app?.InsertIntoCommandLine(Current?.Name ?? string.Empty);
+                return true;
+
+            case ConsoleKey.Backspace when none:
+                GoToParent();
+                return true;
+
+            case ConsoleKey.Insert when none:
+                ToggleTagAndAdvance();
+                return true;
+
+            case ConsoleKey.Add when none:
+                PromptSelectByMask(app, selected: true);
+                return true;
+            case ConsoleKey.Add when shift:
+                SetAllTags(true);
+                return true;
+            case ConsoleKey.Add when ctrl:
+                SelectSameExtension(true);
+                return true;
+
+            case ConsoleKey.Subtract when none:
+                PromptSelectByMask(app, selected: false);
+                return true;
+            case ConsoleKey.Subtract when shift:
+                SetAllTags(false);
+                return true;
+            case ConsoleKey.Subtract when ctrl:
+                SelectSameExtension(false);
+                return true;
+
+            case ConsoleKey.Multiply when none:
+                InvertSelection(includeDirectories: false);
+                return true;
+            case ConsoleKey.Multiply when ctrl:
+                InvertSelection(includeDirectories: true);
+                return true;
+
+            case ConsoleKey.A when ctrl:
+                SelectAllFiles();
+                return true;
+
+            case ConsoleKey.R when ctrl:
+                Reload();
+                return true;
+
+            case ConsoleKey.H when ctrl:
+                Settings.ShowHiddenFiles = !Settings.ShowHiddenFiles;
+                Reload();
+                return true;
+
+            case >= ConsoleKey.D1 and <= ConsoleKey.D9 when ctrl:
+                ViewMode = PanelViewModes.FromNumber(key.Key - ConsoleKey.D0);
+                return true;
+
+            case >= ConsoleKey.F3 and <= ConsoleKey.F11 when ctrl:
+                SetSort(SortForFunctionKey(key.Key));
+                return true;
+
+            case ConsoleKey.F12 when ctrl:
+                ShowSortMenu(app);
+                return true;
+
+            default:
+                return false;
+        }
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// A click in a panel that does not have the focus is <em>not</em> consumed: the method returns
+    /// <see langword="false"/> so the shell can make this panel active and, if it wants to, replay
+    /// the event. Everything else is handled here - the wheel scrolls the window without moving the
+    /// cursor, the left button moves the cursor (and activates the entry when it was already under
+    /// the cursor, or on a double click), and the right button toggles the tag and moves the cursor.
+    /// </remarks>
+    public bool HandleMouse(MouseEvent m, IAppContext ctx)
+    {
+        if (!IsVisible || !Bounds.Contains(m.X, m.Y))
+        {
+            return false;
+        }
+
+        if (!IsActive)
+        {
+            return false;
+        }
+
+        if (m.Kind == MouseKind.Wheel)
+        {
+            ScrollBy(-m.Wheel * WheelRows);
+            return true;
+        }
+
+        if (m.Kind is not (MouseKind.Down or MouseKind.DoubleClick))
+        {
+            return false;
+        }
+
+        int index = IndexAt(m.X, m.Y);
+        if (index < 0)
+        {
+            return false;
+        }
+
+        _shiftSelection = null;
+
+        if (m.Button == MouseButton.Right)
+        {
+            FileEntry entry = _entries[index];
+            entry.Selected = !entry.Selected;
+            SetCursor(index);
+            return true;
+        }
+
+        if (m.Button != MouseButton.Left)
+        {
+            return false;
+        }
+
+        bool wasCurrent = index == _cursor;
+        SetCursor(index);
+
+        if (m.Kind == MouseKind.DoubleClick || wasCurrent)
+        {
+            Activate(ctx ?? Context);
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// The entry under a screen cell.
+    /// </summary>
+    /// <param name="screenX">Screen column.</param>
+    /// <param name="screenY">Screen row.</param>
+    /// <returns>The entry index, or <c>-1</c> when the cell is not a file row.</returns>
+    public int IndexAt(int screenX, int screenY)
+    {
+        Rect b = Bounds;
+        if (b.Width < MinWidth || b.Height < MinHeight)
+        {
+            return -1;
+        }
+
+        int rows = VisibleRows;
+        int row = screenY - (b.Y + 2);
+        if (row < 0 || row >= rows)
+        {
+            return -1;
+        }
+
+        PanelColumnLayout layout = LayoutFor(b.Width - 2);
+        int stripe = layout.StripeAt(screenX - (b.X + 1));
+        if (stripe < 0)
+        {
+            return -1;
+        }
+
+        int index = _top + (stripe * rows) + row;
+        return index >= 0 && index < _entries.Count ? index : -1;
+    }
+
+    /// <summary>Scrolls the window without moving the cursor, the way the wheel does.</summary>
+    /// <param name="rows">How many rows to scroll; positive scrolls towards the end of the listing.</param>
+    public void ScrollBy(int rows)
+    {
+        int page = PageSize;
+        _top = Math.Clamp(_top + rows, 0, Math.Max(0, _entries.Count - page));
+    }
+
+    // ------------------------------------------------------------- test hooks
+
+    /// <summary>Replaces the listing with one built in memory, bypassing the file system.</summary>
+    /// <param name="path">The path the panel reports and shows in its title.</param>
+    /// <param name="entries">The listing, already in display order.</param>
+    internal void SetEntriesForTest(string path, IReadOnlyList<FileEntry> entries) =>
+        SetEntriesForTest(path, entries, null);
+
+    /// <summary>Replaces the listing with one built in memory and, optionally, an error.</summary>
+    /// <param name="path">The path the panel reports and shows in its title.</param>
+    /// <param name="entries">The listing, already in display order.</param>
+    /// <param name="error">The read error to display, or <see langword="null"/>.</param>
+    internal void SetEntriesForTest(string path, IReadOnlyList<FileEntry> entries, string? error)
+    {
+        _path = path ?? string.Empty;
+        _entries = entries is null ? [] : [.. entries];
+        _error = string.IsNullOrEmpty(error) ? null : error;
+        _cursor = 0;
+        _top = 0;
+        _shiftSelection = null;
+        Recount();
+    }
+
+    // --------------------------------------------------------------- internals
+
+    private int LastFileRow(Rect b) => ShowStatusBar ? b.Y + b.Height - 4 : b.Y + b.Height - 2;
+
+    private PanelColumnLayout LayoutFor(int innerWidth)
+    {
+        if (_layoutCache is null || _layoutCache.InnerWidth != innerWidth || _layoutCache.Mode != _viewMode)
+        {
+            _layoutCache = PanelColumnLayout.Compute(_viewMode, innerWidth);
+        }
+
+        return _layoutCache;
+    }
+
+    private void ClampScroll(int page)
+    {
+        int count = _entries.Count;
+        if (count == 0)
+        {
+            _cursor = 0;
+            _top = 0;
+            return;
+        }
+
+        _cursor = Math.Clamp(_cursor, 0, count - 1);
+        _top = Math.Clamp(_top, 0, Math.Max(0, count - page));
+    }
+
+    private void EnsureVisible()
+    {
+        int count = _entries.Count;
+        if (count == 0)
+        {
+            _top = 0;
+            return;
+        }
+
+        int page = PageSize;
+        if (_cursor < _top)
+        {
+            _top = _cursor;
+        }
+        else if (_cursor >= _top + page)
+        {
+            _top = _cursor - page + 1;
+        }
+
+        _top = Math.Clamp(_top, 0, Math.Max(0, count - page));
+    }
+
+    private void SetCursor(int index)
+    {
+        int count = _entries.Count;
+        if (count == 0)
+        {
+            _cursor = 0;
+            _top = 0;
+            return;
+        }
+
+        _cursor = Math.Clamp(index, 0, count - 1);
+        EnsureVisible();
+    }
+
+    private bool MoveTo(int index)
+    {
+        _shiftSelection = null;
+        SetCursor(index);
+        return true;
+    }
+
+    private bool ShiftMove(int target, bool inclusive)
+    {
+        int count = _entries.Count;
+        if (count == 0)
+        {
+            return true;
+        }
+
+        int from = Math.Clamp(_cursor, 0, count - 1);
+        int to = Math.Clamp(target, 0, count - 1);
+
+        _shiftSelection ??= !_entries[from].Selected;
+        bool value = _shiftSelection.Value;
+
+        if (from == to)
+        {
+            _entries[from].Selected = value;
+        }
+        else if (to > from)
+        {
+            int last = inclusive ? to : to - 1;
+            for (int i = from; i <= last; i++)
+            {
+                _entries[i].Selected = value;
+            }
+        }
+        else
+        {
+            int first = inclusive ? to : to + 1;
+            for (int i = first; i <= from; i++)
+            {
+                _entries[i].Selected = value;
+            }
+        }
+
+        SetCursor(to);
+        return true;
+    }
+
+    private void ToggleTagAndAdvance()
+    {
+        FileEntry? current = Current;
+        if (current is not null && !current.IsParent)
+        {
+            current.Selected = !current.Selected;
+        }
+
+        SetCursor(_cursor + 1);
+    }
+
+    private void SetAllTags(bool selected)
+    {
+        foreach (FileEntry e in _entries)
+        {
+            if (!e.IsParent && !e.IsDirectory)
+            {
+                e.Selected = selected;
+            }
+        }
+    }
+
+    private void Activate(IAppContext? app)
+    {
+        FileEntry? current = Current;
+        if (current is null)
+        {
+            return;
+        }
+
+        if (current.IsParent)
+        {
+            GoToParent();
+            return;
+        }
+
+        if (current.IsDirectory)
+        {
+            Navigate(current.FullPath);
+            return;
+        }
+
+        app?.RunShellCommand("\"" + current.FullPath + "\"");
+    }
+
+    private void EnterCurrentDirectory()
+    {
+        FileEntry? current = Current;
+        if (current is null || !current.IsDirectory)
+        {
+            return;
+        }
+
+        if (current.IsParent)
+        {
+            GoToParent();
+            return;
+        }
+
+        Navigate(current.FullPath);
+    }
+
+    private void GoToParent()
+    {
+        string? parent = FileSystemProvider.GetParent(CurrentPath);
+        if (parent is null)
+        {
+            return;
+        }
+
+        Navigate(parent, LeafName(CurrentPath));
+    }
+
+    private void PromptSelectByMask(IAppContext? app, bool selected)
+    {
+        string? mask = app?.Ui.Input(
+            selected ? "Select" : "Deselect",
+            selected ? "Select files matching mask:" : "Deselect files matching mask:",
+            "*.*",
+            selected ? "SelectMask" : "DeselectMask");
+
+        if (mask is not null)
+        {
+            SelectByMask(mask, selected);
+        }
+    }
+
+    private void ShowSortMenu(IAppContext? app)
+    {
+        if (app is null)
+        {
+            return;
+        }
+
+        var modes = SortMenuModes;
+        var items = new List<MenuItem>(modes.Length);
+        for (int i = 0; i < modes.Length; i++)
+        {
+            items.Add(new MenuItem(SortMenuText(modes[i]), SortMenuAccelerator(modes[i]))
+            {
+                Checked = modes[i] == SortMode,
+                Tag = modes[i],
+            });
+        }
+
+        int start = Array.IndexOf(modes, SortMode);
+        int chosen = app.Ui.Menu("Sort by", items, Math.Max(0, start));
+        if (chosen >= 0 && chosen < modes.Length)
+        {
+            SetSort(modes[chosen]);
+        }
+    }
+
+    private bool HandleQuickSearchKey(KeyEvent key)
+    {
+        if (!_quickSearch.IsActive)
+        {
+            return false;
+        }
+
+        switch (key.Key)
+        {
+            case ConsoleKey.Escape:
+                _quickSearch.Cancel();
+                return true;
+
+            case ConsoleKey.Backspace:
+                if (_quickSearch.Backspace(DateTime.UtcNow))
+                {
+                    JumpToQuickSearchMatch(_cursor);
+                }
+
+                return true;
+
+            case ConsoleKey.Enter:
+            case ConsoleKey.UpArrow:
+            case ConsoleKey.DownArrow:
+            case ConsoleKey.LeftArrow:
+            case ConsoleKey.RightArrow:
+            case ConsoleKey.Home:
+            case ConsoleKey.End:
+            case ConsoleKey.PageUp:
+            case ConsoleKey.PageDown:
+                // These end the search and are then handled normally.
+                _quickSearch.Cancel();
+                return false;
+
+            default:
+                if (key.IsPlainChar)
+                {
+                    _quickSearch.Append(key.Ch, DateTime.UtcNow);
+                    JumpToQuickSearchMatch(_cursor);
+                    return true;
+                }
+
+                return false;
+        }
+    }
+
+    private static bool StartsQuickSearch(KeyEvent key)
+    {
+        if ((key.Mods & KeyMods.Alt) == 0 || (key.Mods & KeyMods.Ctrl) != 0)
+        {
+            return false;
+        }
+
+        char c = key.Ch;
+        return c != '\0' && !char.IsControl(c) && (char.IsLetterOrDigit(c) || c is '.' or '-' or '_' or '*' or '?');
+    }
+
+    private void JumpToQuickSearchMatch(int from)
+    {
+        int hit = QuickSearch.Find(_entries, _quickSearch.Text, from);
+        if (hit >= 0)
+        {
+            SetCursor(hit);
+        }
+    }
+
+    private void Load(string? focusName)
+    {
+        DirectoryListing listing = FileSystemProvider.Read(
+            _path,
+            Settings.ShowHiddenFiles,
+            MakeComparer());
+
+        _entries = [.. listing.Entries];
+        _error = listing.Error;
+        Recount();
+        FocusOn(focusName);
+    }
+
+    private void Resort()
+    {
+        FileEntry? current = Current;
+        _entries = MakeComparer().Sort(_entries);
+        _cursor = current is null ? 0 : Math.Max(0, _entries.IndexOf(current));
+        EnsureVisible();
+    }
+
+    private FileEntryComparer MakeComparer() =>
+        FileEntryComparer.For(SortMode, ReverseSort, Settings);
+
+    private void FocusOn(string? name)
+    {
+        _cursor = 0;
+        if (!string.IsNullOrEmpty(name))
+        {
+            for (int i = 0; i < _entries.Count; i++)
+            {
+                if (string.Equals(_entries[i].Name, name, NameComparison))
+                {
+                    _cursor = i;
+                    break;
+                }
+            }
+        }
+
+        EnsureVisible();
+    }
+
+    private void Recount()
+    {
+        _fileCount = 0;
+        _directoryCount = 0;
+        _totalBytes = 0;
+
+        foreach (FileEntry e in _entries)
+        {
+            if (e.IsParent)
+            {
+                continue;
+            }
+
+            if (e.IsDirectory)
+            {
+                _directoryCount++;
+            }
+            else
+            {
+                _fileCount++;
+                _totalBytes += e.Size;
+            }
+        }
+    }
+
+    private static string LeafName(string path)
+    {
+        string trimmed = path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        string leaf = Path.GetFileName(trimmed);
+        return string.IsNullOrEmpty(leaf) ? trimmed : leaf;
+    }
+
+    private static string SafeCurrentDirectory()
+    {
+        try
+        {
+            return FileSystemProvider.NormalizeDisplayPath(Environment.CurrentDirectory);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            return string.Empty;
+        }
+    }
+
+    private static SortMode SortForFunctionKey(ConsoleKey key) => key switch
+    {
+        ConsoleKey.F3 => Files.SortMode.Name,
+        ConsoleKey.F4 => Files.SortMode.Extension,
+        ConsoleKey.F5 => Files.SortMode.Modified,
+        ConsoleKey.F6 => Files.SortMode.Size,
+        ConsoleKey.F7 => Files.SortMode.Unsorted,
+        ConsoleKey.F8 => Files.SortMode.Created,
+        ConsoleKey.F9 => Files.SortMode.Accessed,
+        ConsoleKey.F10 => Files.SortMode.Description,
+        _ => Files.SortMode.Owner,
+    };
+
+    private static readonly SortMode[] SortMenuModes =
+    [
+        Files.SortMode.Name,
+        Files.SortMode.Extension,
+        Files.SortMode.Modified,
+        Files.SortMode.Size,
+        Files.SortMode.Unsorted,
+        Files.SortMode.Created,
+        Files.SortMode.Accessed,
+        Files.SortMode.Description,
+        Files.SortMode.Owner,
+    ];
+
+    private static string SortMenuText(SortMode mode) => mode switch
+    {
+        Files.SortMode.Name => "&Name",
+        Files.SortMode.Extension => "&Extension",
+        Files.SortMode.Modified => "&Modification time",
+        Files.SortMode.Size => "&Size",
+        Files.SortMode.Unsorted => "&Unsorted",
+        Files.SortMode.Created => "&Creation time",
+        Files.SortMode.Accessed => "&Access time",
+        Files.SortMode.Description => "&Description",
+        _ => "&Owner",
+    };
+
+    private static string SortMenuAccelerator(SortMode mode) => mode switch
+    {
+        Files.SortMode.Name => "Ctrl+F3",
+        Files.SortMode.Extension => "Ctrl+F4",
+        Files.SortMode.Modified => "Ctrl+F5",
+        Files.SortMode.Size => "Ctrl+F6",
+        Files.SortMode.Unsorted => "Ctrl+F7",
+        Files.SortMode.Created => "Ctrl+F8",
+        Files.SortMode.Accessed => "Ctrl+F9",
+        Files.SortMode.Description => "Ctrl+F10",
+        _ => "Ctrl+F11",
+    };
+}

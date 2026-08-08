@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+
+jobs:
+  build:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore OpenCommander.sln
+
+      - name: Build
+        run: dotnet build OpenCommander.sln --configuration Release --no-restore
+
+      - name: Test
+        run: >
+          dotnet test tests/OpenCommander.Tests/OpenCommander.Tests.csproj
+          --configuration Release
+          --no-build
+          --logger "trx;LogFileName=test-results.trx"
+          --results-directory artifacts/test-results
+
+      # The TUI cannot be started interactively in CI, but --screenshot renders exactly one frame
+      # against a headless terminal and exits, so the assembled application is still smoke tested.
+      - name: Screenshot smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet run --project src/OpenCommander/OpenCommander.csproj --configuration Release --no-build -- \
+            --screenshot --size 120x40 --left . --right ./src/OpenCommander > frame.txt
+          cat frame.txt
+          grep -q 'Name'   frame.txt
+          grep -q 'Bytes:' frame.txt
+          grep -q '1Help'  frame.txt
+          grep -q '12Screen' frame.txt
+
+      - name: Check --help and --version
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet run --project src/OpenCommander/OpenCommander.csproj --configuration Release --no-build -- --version
+          dotnet run --project src/OpenCommander/OpenCommander.csproj --configuration Release --no-build -- --help
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.os }}
+          path: artifacts/test-results
+          if-no-files-found: ignore

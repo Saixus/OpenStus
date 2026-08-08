@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>oc</AssemblyName>
+    <RootNamespace>OpenCommander</RootNamespace>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+    <!-- Real culture data is required: file dates and sizes are formatted for the user. -->
+    <InvariantGlobalization>false</InvariantGlobalization>
+  </PropertyGroup>
+
+  <!-- PublishSingleFile friendliness: no dependency on Assembly.Location, no satellite
+       assemblies, source-generated JSON, and the analyzers switched on so regressions
+       show up at build time. PublishSingleFile itself only kicks in once a RID is chosen
+       (dotnet publish -r win-x64), so a plain `dotnet build` stays fast. -->
+  <PropertyGroup>
+    <SelfContained>false</SelfContained>
+    <PublishSingleFile Condition="'$(RuntimeIdentifier)' != ''">true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableSingleFileAnalyzer>true</EnableSingleFileAnalyzer>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <DebugType>embedded</DebugType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="OpenCommander.Tests" />
+  </ItemGroup>
+
+</Project>

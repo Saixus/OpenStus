@@ -1,0 +1,29 @@
+<Project>
+
+  <!--
+    Settings shared by every project in the Open Commander repository.
+    Project-specific settings live in the individual .csproj files.
+  -->
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
+    <Deterministic>true</Deterministic>
+    <NeutralLanguage>en</NeutralLanguage>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <Product>Open Commander</Product>
+    <Company>Open Commander contributors</Company>
+    <Copyright>Copyright (c) 2026 Open Commander contributors</Copyright>
+    <Authors>Open Commander contributors</Authors>
+    <Version>0.1.0</Version>
+    <RepositoryUrl>https://github.com/opencommander/opencommander</RepositoryUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+  </PropertyGroup>
+
+</Project>
