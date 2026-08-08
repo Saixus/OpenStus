@@ -351,6 +351,20 @@ public sealed class Application : IAppContext, IDisposable
             _right.ViewMode = mode;
         }
 
+        // A pinned or hidden clock is what makes --screenshot reproducible: the wall clock is the
+        // only thing in a frame that changes on its own, so a golden-file comparison needs it gone.
+        if (args.HideClock)
+        {
+            Settings.ShowClock = false;
+        }
+        else if (args.ClockTime is TimeOnly pinned)
+        {
+            DateTime fixedTime = DateTime.SpecifyKind(
+                new DateOnly(2000, 1, 1).ToDateTime(pinned),
+                DateTimeKind.Local);
+            _clock.TimeSource = () => fixedTime;
+        }
+
         Layout();
         SyncWorkingDirectory();
         _dirty = true;

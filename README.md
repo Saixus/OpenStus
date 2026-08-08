@@ -19,11 +19,11 @@ and behaves the same in Windows Terminal, conhost, and any terminal emulator on 
 Rendered with
 
 ```
-oc --screenshot --size 120x28 --left . --right ./src/OpenCommander/Rendering
+oc --screenshot --size 120x28 --clock 10:06 --left . --right ./src/OpenCommander/Rendering
 ```
 
 ```
-┌───────────── C:\Work\!Lab\Git\OpenCommander ─────────────┐┌─ …rk\!Lab\Git\OpenCommander\src\OpenCommander\Rende       
+┌───────────── C:\Work\!Lab\Git\OpenCommander ─────────────┐┌─ …rk\!Lab\Git\OpenCommander\src\OpenCommander\Rend10:06 AM
 │            Name             │            Name            ││            Name             │            Name            │
 │ ..                          │                            ││ ..                          │                            │
 │ .git                        │                            ││ BoxChars.cs                 │                            │
@@ -48,7 +48,7 @@ oc --screenshot --size 120x28 --left . --right ./src/OpenCommander/Rendering
 │                             │                            ││                             │                            │
 ├──────────────────────────────────────────────────────────┤├──────────────────────────────────────────────────────────┤
  ..                                      Up  08/08/26  10:04 ..                                      Up  08/08/26  14:06
-└────────── Bytes: 44.5 K, files: 8, folders: 5 ───────────┘└────────── Bytes: 77.6 K, files: 8, folders: 0 ───────────┘
+└────────── Bytes: 44.7 K, files: 8, folders: 5 ───────────┘└────────── Bytes: 77.6 K, files: 8, folders: 0 ───────────┘
 C:\Work\!Lab\Git\OpenCommander>
 1Help    2UserMn    3View    4Edit    5Copy    6RenMov    7MkFold    8Delete   9ConfMn   10Quit   11Plugin   12Screen
 ```
@@ -95,10 +95,13 @@ oc [startPath] [options]
   --theme <file.json>    theme file: which colour each element uses
   --colors <mode>        auto (the default), truecolor or indexed;
                          indexed keeps the terminal's own colour scheme
-  --palette <file.json>  RGB values for the 16 colour slots, used by
-                         truecolor (the default is the classic VGA one)
+  --palette <name|file>  RGB values for the 16 colour slots, used by
+                         truecolor: nt (the default, the table Far
+                         installs), vga, campbell, or a JSON file
   --view <1-9>           initial view mode for both panels
                          1 Brief  2 Medium  3 Full  4 Wide  5 Detailed
+  --clock <HH:mm|off>    pin the corner clock to a fixed time, or hide
+                         it, so a rendered frame is reproducible
   --screenshot           render one frame to stdout and exit, without
                          touching the real console
   --ansi                 with --screenshot, emit SGR colour escapes
@@ -119,6 +122,17 @@ without it rather than quietly doing nothing: a forced size makes the terminal h
 interactive `oc --size 80x25` would paint into a screen no one can see and exit having printed
 nothing. An interactive run always takes its size from the console and follows it as you resize the
 window.
+
+`--clock` exists so a rendered frame can be compared against a golden file. The corner clock is the
+one thing in a frame that changes on its own, so without it two runs a minute apart differ and a
+byte-exact comparison is worthless. `--clock 10:06` pins it — 24-hour or `3:07 PM`, always parsed
+under the invariant culture so a build machine's locale cannot move it — and `--clock off` drops the
+clock altogether, which is usually what you want in CI:
+
+```sh
+oc --screenshot --size 120x28 --clock off --left . > frame.txt
+diff frame.txt tests/golden/frame.txt
+```
 
 ## Colours
 

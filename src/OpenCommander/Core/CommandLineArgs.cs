@@ -87,6 +87,19 @@ public sealed class CommandLineArgs
     /// <summary>The initial panel view mode number 1..9, or <see langword="null"/>.</summary>
     public int? ViewMode { get; set; }
 
+    /// <summary>
+    /// A fixed time for the corner clock, or <see langword="null"/> to read the wall clock.
+    /// </summary>
+    /// <remarks>
+    /// Exists so <c>--screenshot</c> can be byte-for-byte reproducible. A live clock in the top
+    /// right corner means two runs a minute apart differ, which defeats comparing a rendered frame
+    /// against a golden file - the one thing <c>--screenshot</c> is for.
+    /// </remarks>
+    public TimeOnly? ClockTime { get; set; }
+
+    /// <summary>The user asked for <c>--clock off</c>: draw no clock at all.</summary>
+    public bool HideClock { get; set; }
+
     /// <summary>The user asked for <c>--help</c>.</summary>
     public bool ShowHelp { get; set; }
 
@@ -123,10 +136,13 @@ public sealed class CommandLineArgs
           --theme <file.json>    theme file: which colour each element uses
           --colors <mode>        auto (the default), truecolor or indexed;
                                  indexed keeps the terminal's own colour scheme
-          --palette <file.json>  RGB values for the 16 colour slots, used by
-                                 truecolor (the default is the classic VGA one)
+          --palette <name|file>  RGB values for the 16 colour slots, used by
+                                 truecolor: nt (the default, the table Far
+                                 installs), vga, campbell, or a JSON file
           --view <1-9>           initial view mode for both panels
                                  1 Brief  2 Medium  3 Full  4 Wide  5 Detailed
+          --clock <HH:mm|off>    pin the corner clock to a fixed time, or hide
+                                 it, so a rendered frame is reproducible
           --screenshot           render one frame to stdout and exit, without
                                  touching the real console
           --ansi                 with --screenshot, emit SGR colour escapes
@@ -294,6 +310,29 @@ public sealed class CommandLineArgs
                     parsed.ViewMode = mode;
                     break;
 
+                case "clock":
+                    if (!TryTakeValue(args, ref i, inlineValue, name, parsed, out string? clock))
+                    {
+                        return parsed;
+                    }
+
+                    if (IsClockOff(clock))
+                    {
+                        parsed.HideClock = true;
+                        parsed.ClockTime = null;
+                        break;
+                    }
+
+                    if (!TryParseClock(clock, out TimeOnly time))
+                    {
+                        parsed.Error = "--clock expects a time like 10:06, 10:06:30 or 10:06 AM, or \"off\"";
+                        return parsed;
+                    }
+
+                    parsed.ClockTime = time;
+                    parsed.HideClock = false;
+                    break;
+
                 default:
                     parsed.Error = "Unknown option: " + raw;
                     return parsed;
@@ -429,5 +468,34 @@ public sealed class CommandLineArgs
 
         value = args[++index];
         return true;
+    }
+
+    /// <summary>The spellings of <c>--clock</c> that mean "draw no clock".</summary>
+    private static bool IsClockOff(string? value) =>
+        value?.Trim().ToLowerInvariant() is "off" or "none" or "no" or "hide" or "hidden";
+
+    /// <summary>
+    /// Parses a <c>--clock</c> time. Accepts 24 hour (<c>10:06</c>, <c>10:06:30</c>) and the
+    /// 12 hour spelling the clock itself renders (<c>10:06 AM</c>), always under the invariant
+    /// culture so a build machine's locale cannot change what a golden frame looks like.
+    /// </summary>
+    /// <param name="value">The raw option value.</param>
+    /// <param name="time">The parsed time on success.</param>
+    /// <returns><see langword="true"/> when <paramref name="value"/> was a time.</returns>
+    public static bool TryParseClock(string? value, out TimeOnly time)
+    {
+        time = default;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        string[] formats = ["HH:mm", "H:mm", "HH:mm:ss", "H:mm:ss", "h:mm tt", "hh:mm tt", "h:mm:ss tt", "hh:mm:ss tt"];
+        return TimeOnly.TryParseExact(
+            value.Trim(),
+            formats,
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.None,
+            out time);
     }
 }

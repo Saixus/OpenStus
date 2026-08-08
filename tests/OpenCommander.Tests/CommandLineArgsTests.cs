@@ -12,6 +12,131 @@ namespace OpenCommander.Tests;
 /// </summary>
 public class CommandLineArgsOptionTests
 {
+    // ------------------------------------------------------------------ --clock
+
+    [Theory]
+    [InlineData("10:06", 10, 6)]
+    [InlineData("0:00", 0, 0)]
+    [InlineData("23:45", 23, 45)]
+    [InlineData("10:06:30", 10, 6)]
+    [InlineData("3:07 PM", 15, 7)]
+    [InlineData("03:07 AM", 3, 7)]
+    [InlineData("  10:06  ", 10, 6)]
+    public void ClockAcceptsTwentyFourHourAndTwelveHourTimes(string value, int hour, int minute)
+    {
+        CommandLineArgs args = CommandLineArgs.Parse(["--clock", value]);
+
+        Assert.False(args.HasError);
+        Assert.False(args.HideClock);
+        TimeOnly time = Assert.NotNull(args.ClockTime) is var _ ? args.ClockTime!.Value : default;
+        Assert.Equal(hour, time.Hour);
+        Assert.Equal(minute, time.Minute);
+    }
+
+    [Theory]
+    [InlineData("off")]
+    [InlineData("OFF")]
+    [InlineData("none")]
+    [InlineData("hide")]
+    [InlineData("hidden")]
+    [InlineData("no")]
+    public void ClockOffHidesTheClockEntirely(string value)
+    {
+        CommandLineArgs args = CommandLineArgs.Parse(["--clock", value]);
+
+        Assert.False(args.HasError);
+        Assert.True(args.HideClock);
+        Assert.Null(args.ClockTime);
+    }
+
+    [Theory]
+    [InlineData("nonsense")]
+    [InlineData("25:00")]
+    [InlineData("10")]
+    [InlineData("10:60")]
+    [InlineData("")]
+    public void ClockRejectsWhatIsNotATime(string value)
+    {
+        CommandLineArgs args = CommandLineArgs.Parse(["--clock", value]);
+
+        Assert.True(args.HasError);
+        Assert.Contains("--clock expects", args.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ClockNeedsAValue()
+    {
+        CommandLineArgs args = CommandLineArgs.Parse(["--clock"]);
+
+        Assert.True(args.HasError);
+        Assert.Equal("--clock needs a value", args.Error);
+    }
+
+    [Fact]
+    public void ClockAlsoAcceptsTheEqualsSpellingAndTheLastOneWins()
+    {
+        CommandLineArgs args = CommandLineArgs.Parse(["--clock=off", "--clock=10:06"]);
+
+        Assert.False(args.HasError);
+        Assert.False(args.HideClock);
+        Assert.Equal(new TimeOnly(10, 6), args.ClockTime);
+
+        CommandLineArgs back = CommandLineArgs.Parse(["--clock=10:06", "--clock=off"]);
+
+        Assert.True(back.HideClock);
+        Assert.Null(back.ClockTime);
+    }
+
+    /// <summary>Nothing given means the wall clock, i.e. the behaviour before the flag existed.</summary>
+    [Fact]
+    public void NoClockOptionLeavesTheLiveClockAlone()
+    {
+        CommandLineArgs args = CommandLineArgs.Parse(["--screenshot"]);
+
+        Assert.Null(args.ClockTime);
+        Assert.False(args.HideClock);
+    }
+
+    /// <summary>
+    /// The point of the flag: two renders of the same tree must be byte-identical, which they are
+    /// not while the corner clock follows the wall clock.
+    /// </summary>
+    [Fact]
+    public void APinnedClockMakesARenderedFrameReproducible()
+    {
+        using var dir = new TempDir();
+        File.WriteAllText(dir.File("alpha.txt"), "a");
+        File.WriteAllText(dir.File("beta.txt"), "bb");
+
+        string First() => Render(dir.Path, "10:06");
+
+        string one = First();
+        string two = First();
+
+        Assert.Equal(one, two);
+        Assert.Contains("10:06 AM", one, StringComparison.Ordinal);
+
+        // ... and "off" removes it rather than freezing it.
+        string hidden = Render(dir.Path, "off");
+        Assert.DoesNotContain(" AM", hidden, StringComparison.Ordinal);
+        Assert.DoesNotContain(" PM", hidden, StringComparison.Ordinal);
+
+        static string Render(string path, string clock)
+        {
+            CommandLineArgs args = CommandLineArgs.Parse(
+                ["--screenshot", "--size", "100x20", "--clock", clock, "--left", path, "--right", path]);
+            Assert.False(args.HasError);
+
+            using Terminal terminal = Terminal.Create(args.EffectiveWidth, args.EffectiveHeight);
+            var app = new Application(terminal, new Settings(), Theme.FarDefault(), input: null);
+            app.Initialize(args);
+            app.DrawFrame();
+            return terminal.Buffer.RenderPlainText();
+        }
+    }
+
+    // ------------------------------------------------------------------ --size
+
     [Theory]
     [InlineData("--size", "80x25")]
     [InlineData("--size=80x25", null)]
@@ -122,7 +247,15 @@ public class CommandLineArgsOptionTests
             StringComparison.Ordinal);
 
         Assert.Contains(
-            "--palette <file.json>  RGB values for the 16 colour slots, used by",
+            "--palette <name|file>  RGB values for the 16 colour slots, used by",
+            usage,
+            StringComparison.Ordinal);
+
+        // The default is the table Far installs, not the older CGA/EGA one.
+        Assert.Contains("nt (the default", usage, StringComparison.Ordinal);
+
+        Assert.Contains(
+            "--clock <HH:mm|off>    pin the corner clock to a fixed time, or hide",
             usage,
             StringComparison.Ordinal);
     }

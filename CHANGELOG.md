@@ -10,15 +10,21 @@ All notable changes to Open Commander are recorded here. The format follows
 
 - **24-bit colour.** The renderer can write literal RGB (`38;2;r;g;b` / `48;2;r;g;b`) resolved
   through a 16-entry palette instead of naming the terminal's own colour slots, so the classic look
-  survives whatever scheme the terminal is themed with. The default palette is the classic VGA table;
-  the legacy Windows console table Far Manager installs ships alongside it.
+  survives whatever scheme the terminal is themed with. The default palette is the Windows console
+  table Far Manager installs for itself (`interf.cpp:392`); the older classic VGA table and Windows
+  Terminal's Campbell scheme ship alongside it as `--palette vga` and `--palette campbell`.
 - **`--colors <auto|truecolor|indexed>`** and the matching `colors` setting. `auto` — the default —
   detects what the terminal can take from `COLORTERM`, `WT_SESSION`, `ConEmuANSI`, `TERM_PROGRAM`,
   `TERM` and the Windows build number, in that order of trust. `indexed` is the escape hatch for
   anyone who themes their terminal deliberately.
-- **`--palette <file.json>`** and the matching `palettePath` setting: the RGB behind the 16 colour
-  slots, as `"#RRGGBB"` keyed by `ConsoleColor` name, index or the usual aliases. Omitted slots keep
-  their built-in value, and a missing or malformed file falls back to the built-in table.
+- **`--palette <name|file>`** and the matching `palettePath` setting: the RGB behind the 16 colour
+  slots, as `"#RRGGBB"` keyed by `ConsoleColor` name, index or the usual aliases. Also takes a
+  built-in preset by name — `nt`, `vga` or `campbell`. Omitted slots keep their built-in value, and
+  a missing or malformed file falls back to the built-in table.
+- **`--clock <HH:mm|off>`.** Pins the corner clock to a fixed time, or hides it. The wall clock is
+  the only thing in a rendered frame that changes on its own, so `--screenshot` output could not be
+  compared against a golden file; now it can. Times are parsed under the invariant culture in both
+  24-hour and `3:07 PM` form, so a build machine's locale cannot move the result.
 - **`NO_COLOR` support.** Present and non-empty, whatever its value, it pins the run to the 16
   indexed slots so the terminal's own scheme stays in charge. Only an explicit `--colors` overrides
   it; the saved setting and the detection do not.
