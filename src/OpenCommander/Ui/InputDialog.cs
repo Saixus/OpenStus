@@ -10,9 +10,11 @@ namespace OpenCommander.Ui;
 /// <see cref="EditControl"/> and an OK/Cancel row.
 /// </summary>
 /// <remarks>
-/// Enter accepts, Esc cancels. When a history list is supplied the edit field walks it with Up and
-/// Down, and Ctrl+Down calls <see cref="EditControl.HistoryChooser"/> - which the host wires to a
-/// real <see cref="ListDialog"/>, because a control may not own a modal loop.
+/// Enter accepts, Esc cancels. The initial text opens selected with the caret at its end, as in
+/// Far: the first typed character replaces the whole suggestion, and a motion key drops the
+/// selection to edit it instead. When a history list is supplied the edit field walks it with Up
+/// and Down, and Ctrl+Down calls <see cref="EditControl.HistoryChooser"/> - which the host wires
+/// to a real <see cref="ListDialog"/>, because a control may not own a modal loop.
 /// </remarks>
 public sealed class InputDialog : Dialog
 {
@@ -53,6 +55,13 @@ public sealed class InputDialog : Dialog
         CancelButton = CancelButtonControl;
         BareHotkeys = false; // the edit field owns every printable character
         SetFocus(Edit);
+
+        // The edit was already focused when it was added, so the focus-entry selection never
+        // fired; select the suggestion explicitly so the first keypress replaces it, as in Far.
+        if (Edit.Text.Length > 0)
+        {
+            Edit.SelectAll();
+        }
     }
 
     /// <summary>The edit field, exposed so the caller can set a mask, a history chooser or a length limit.</summary>

@@ -11,7 +11,9 @@ namespace OpenCommander.Ui.Controls;
 /// Supports Home/End, Left/Right, Ctrl+Left/Ctrl+Right word motion, Backspace, Delete, Insert to
 /// toggle overwrite mode, Ctrl+Y to clear the line, selection with Shift plus any motion key, and
 /// cut/copy/paste through an injectable <see cref="IClipboard"/> on both the Ctrl+C/X/V and the
-/// Ctrl+Ins/Shift+Del/Shift+Ins bindings.
+/// Ctrl+Ins/Shift+Del/Shift+Ins bindings. When the focus enters the control its whole text is
+/// selected - the Far behaviour that lets the first typed character replace a suggested value
+/// outright.
 /// </para>
 /// <para>
 /// When a <see cref="History"/> list is supplied, Up and Down walk it (the text being edited is
@@ -116,6 +118,18 @@ public sealed class EditControl : DialogControl
     {
         _anchor = 0;
         _caret = _text.Length;
+    }
+
+    /// <summary>
+    /// Selects the whole line when the focus arrives, Far style: the first typed character then
+    /// replaces the old text wholesale, and an unshifted motion key just drops the selection.
+    /// </summary>
+    protected internal override void OnFocusEntered()
+    {
+        if (_text.Length > 0)
+        {
+            SelectAll();
+        }
     }
 
     /// <summary>Drops the selection, leaving the caret where it is.</summary>

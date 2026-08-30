@@ -315,6 +315,8 @@ public class CommandLineRoutingTests
     }
 
     [Theory]
+    [InlineData(ConsoleKey.UpArrow)]
+    [InlineData(ConsoleKey.DownArrow)]
     [InlineData(ConsoleKey.PageUp)]
     [InlineData(ConsoleKey.PageDown)]
     [InlineData(ConsoleKey.Insert)]
@@ -327,6 +329,38 @@ public class CommandLineRoutingTests
         Keys.Type(line, ctx, "text");
 
         Assert.False(line.HandleKey(Keys.Key(key), ctx), $"{key} should have gone to the panel");
+    }
+
+    /// <summary>
+    /// Shift plus a motion key is the panel's select-and-move family in Far, so the command line
+    /// must not treat the chord as an unshifted caret motion - or, worse, a history recall - even
+    /// with a command half typed.
+    /// </summary>
+    [Theory]
+    [InlineData(ConsoleKey.UpArrow)]
+    [InlineData(ConsoleKey.DownArrow)]
+    [InlineData(ConsoleKey.LeftArrow)]
+    [InlineData(ConsoleKey.RightArrow)]
+    [InlineData(ConsoleKey.Home)]
+    [InlineData(ConsoleKey.End)]
+    public void ShiftedMotionKeysReachThePanelWithACommandHalfTyped(ConsoleKey key)
+    {
+        (CommandLine line, RecordingContext ctx) = New();
+        Keys.Type(line, ctx, "git ");
+
+        Assert.False(line.HandleKey(Keys.Key(key, KeyMods.Shift), ctx), $"Shift+{key} should have gone to the panel");
+        Assert.Equal("git ", line.Text); // and it must not have edited or replaced the line
+    }
+
+    [Fact]
+    public void ShiftEnterIsNotEnter()
+    {
+        (CommandLine line, RecordingContext ctx) = New();
+        Keys.Type(line, ctx, "dir");
+
+        Assert.False(line.HandleKey(Keys.Key(ConsoleKey.Enter, KeyMods.Shift), ctx));
+        Assert.Empty(ctx.Commands);
+        Assert.Equal("dir", line.Text);
     }
 
     /// <summary>
@@ -439,56 +473,80 @@ public class CommandLineHistoryTests
     }
 
     [Fact]
-    public void UpWalksBackwardsThroughTheHistory()
+    public void CtrlEWalksBackwardsThroughTheHistory()
     {
         (CommandLine line, RecordingContext ctx) = New("first", "second", "third");
         Keys.Type(line, ctx, "x");
 
-        Assert.True(line.HandleKey(Keys.Key(ConsoleKey.UpArrow), ctx));
+        Assert.True(line.HandleKey(Keys.Key(ConsoleKey.E, KeyMods.Ctrl), ctx));
         Assert.Equal("third", line.Text);
 
-        line.HandleKey(Keys.Key(ConsoleKey.UpArrow), ctx);
+        line.HandleKey(Keys.Key(ConsoleKey.E, KeyMods.Ctrl), ctx);
         Assert.Equal("second", line.Text);
 
-        line.HandleKey(Keys.Key(ConsoleKey.UpArrow), ctx);
+        line.HandleKey(Keys.Key(ConsoleKey.E, KeyMods.Ctrl), ctx);
         Assert.Equal("first", line.Text);
 
         // Already at the oldest entry: the line stays put.
-        line.HandleKey(Keys.Key(ConsoleKey.UpArrow), ctx);
+        line.HandleKey(Keys.Key(ConsoleKey.E, KeyMods.Ctrl), ctx);
         Assert.Equal("first", line.Text);
     }
 
     [Fact]
-    public void DownComesBackAndRestoresTheHalfTypedLine()
+    public void CtrlXComesBackAndRestoresTheHalfTypedLine()
     {
         (CommandLine line, RecordingContext ctx) = New("alpha", "beta");
         Keys.Type(line, ctx, "half typed");
 
-        line.HandleKey(Keys.Key(ConsoleKey.UpArrow), ctx);
-        line.HandleKey(Keys.Key(ConsoleKey.UpArrow), ctx);
+        line.HandleKey(Keys.Key(ConsoleKey.E, KeyMods.Ctrl), ctx);
+        line.HandleKey(Keys.Key(ConsoleKey.E, KeyMods.Ctrl), ctx);
         Assert.Equal("alpha", line.Text);
 
-        line.HandleKey(Keys.Key(ConsoleKey.DownArrow), ctx);
+        line.HandleKey(Keys.Key(ConsoleKey.X, KeyMods.Ctrl), ctx);
         Assert.Equal("beta", line.Text);
 
-        line.HandleKey(Keys.Key(ConsoleKey.DownArrow), ctx);
+        line.HandleKey(Keys.Key(ConsoleKey.X, KeyMods.Ctrl), ctx);
         Assert.Equal("half typed", line.Text);
         Assert.Equal(10, line.Caret);
     }
 
+    /// <summary>
+    /// In Far the arrows always move the panel cursor, whatever is typed - the history is walked
+    /// with Ctrl+E and Ctrl+X. A half-typed command must survive an accidental Up untouched.
+    /// </summary>
     [Fact]
-    public void CtrlEAndCtrlXWalkTheHistoryToo()
+    public void PlainUpAndDownNeverRecallEvenWithTextOnTheLine()
     {
         (CommandLine line, RecordingContext ctx) = New("one", "two");
+        Keys.Type(line, ctx, "half typed");
 
-        Assert.True(line.HandleKey(Keys.Key(ConsoleKey.E, KeyMods.Ctrl), ctx));
+        Assert.False(line.HandleKey(Keys.Key(ConsoleKey.UpArrow), ctx));
+        Assert.False(line.HandleKey(Keys.Key(ConsoleKey.DownArrow), ctx));
+        Assert.Equal("half typed", line.Text);
+    }
+
+    /// <summary>
+    /// While Ctrl+O hides the panels the shell recalls through <see cref="CommandLine.RecallHistory"/>,
+    /// which steps regardless of what is on the line because there is no panel cursor to move.
+    /// </summary>
+    [Fact]
+    public void RecallHistoryStepsRegardlessOfTheLineForTheHiddenPanelsState()
+    {
+        (CommandLine line, RecordingContext ctx) = New("one", "two");
+        Keys.Type(line, ctx, "half");
+
+        Assert.True(line.RecallHistory(previous: true));
         Assert.Equal("two", line.Text);
 
-        line.HandleKey(Keys.Key(ConsoleKey.E, KeyMods.Ctrl), ctx);
+        Assert.True(line.RecallHistory(previous: true));
         Assert.Equal("one", line.Text);
 
-        line.HandleKey(Keys.Key(ConsoleKey.X, KeyMods.Ctrl), ctx);
+        Assert.True(line.RecallHistory(previous: false));
         Assert.Equal("two", line.Text);
+
+        // Stepping past the newest entry restores the half-typed line, exactly like a shell.
+        Assert.True(line.RecallHistory(previous: false));
+        Assert.Equal("half", line.Text);
     }
 
     [Fact]
@@ -512,6 +570,90 @@ public class CommandLineHistoryTests
         (CommandLine line, RecordingContext ctx) = New("one");
 
         Assert.False(line.HandleKey(Keys.Key(ConsoleKey.UpArrow), ctx));
+        Assert.Equal(string.Empty, line.Text);
+    }
+}
+
+public class CommandLinePasteTests
+{
+    private static (CommandLine Line, RecordingContext Ctx, MemoryClipboard Clipboard) New()
+    {
+        var ctx = new RecordingContext();
+        var clipboard = new MemoryClipboard();
+        var line = new CommandLine(ctx.Theme, new CommandHistory()) { Clipboard = clipboard };
+        return (line, ctx, clipboard);
+    }
+
+    [Fact]
+    public void ShiftInsPastesAtTheCaret()
+    {
+        (CommandLine line, RecordingContext ctx, MemoryClipboard clipboard) = New();
+        clipboard.SetText("file.txt");
+        Keys.Type(line, ctx, "copy ");
+
+        Assert.True(line.HandleKey(Keys.Key(ConsoleKey.Insert, KeyMods.Shift), ctx));
+        Assert.Equal("copy file.txt", line.Text);
+        Assert.Equal(13, line.Caret);
+    }
+
+    [Fact]
+    public void CtrlVPastesToo()
+    {
+        (CommandLine line, RecordingContext ctx, MemoryClipboard clipboard) = New();
+        clipboard.SetText("dir");
+
+        Assert.True(line.HandleKey(Keys.Key(ConsoleKey.V, KeyMods.Ctrl), ctx));
+        Assert.Equal("dir", line.Text);
+        Assert.Equal(3, line.Caret);
+    }
+
+    [Fact]
+    public void PastingInTheMiddleKeepsTheTail()
+    {
+        (CommandLine line, RecordingContext ctx, MemoryClipboard clipboard) = New();
+        clipboard.SetText("b");
+        Keys.Type(line, ctx, "ac");
+        line.HandleKey(Keys.Key(ConsoleKey.LeftArrow), ctx);
+
+        Assert.True(line.HandleKey(Keys.Key(ConsoleKey.Insert, KeyMods.Shift), ctx));
+        Assert.Equal("abc", line.Text);
+        Assert.Equal(2, line.Caret);
+    }
+
+    /// <summary>
+    /// The command line is a single-line field: a multi-line clipboard contributes only its first
+    /// line, so a copied block of script cannot smuggle an Enter into the prompt.
+    /// </summary>
+    [Fact]
+    public void OnlyTheFirstLineOfAMultiLineClipboardIsTaken()
+    {
+        (CommandLine line, RecordingContext ctx, MemoryClipboard clipboard) = New();
+        clipboard.SetText("first line\r\nsecond line\nthird");
+
+        Assert.True(line.HandleKey(Keys.Key(ConsoleKey.Insert, KeyMods.Shift), ctx));
+        Assert.Equal("first line", line.Text);
+        Assert.Empty(ctx.Commands);
+    }
+
+    [Fact]
+    public void AnEmptyClipboardIsConsumedButHarmless()
+    {
+        (CommandLine line, RecordingContext ctx, _) = New();
+
+        // The chord is still the command line's even when there is nothing to paste; handing it to
+        // the panel instead would make Shift+Ins mean two different things depending on the
+        // clipboard.
+        Assert.True(line.HandleKey(Keys.Key(ConsoleKey.Insert, KeyMods.Shift), ctx));
+        Assert.Equal(string.Empty, line.Text);
+    }
+
+    [Fact]
+    public void PlainInsertStillBelongsToThePanel()
+    {
+        (CommandLine line, RecordingContext ctx, MemoryClipboard clipboard) = New();
+        clipboard.SetText("x");
+
+        Assert.False(line.HandleKey(Keys.Key(ConsoleKey.Insert), ctx));
         Assert.Equal(string.Empty, line.Text);
     }
 }
@@ -814,6 +956,36 @@ public class TryParseCdTests
         Assert.False(CommandExecutor.TryParseCd("git status", Base, out _));
         Assert.False(CommandExecutor.TryParseCd(string.Empty, Base, out _));
         Assert.False(CommandExecutor.TryParseCd("   ", Base, out _));
+    }
+
+    /// <summary>The no-space cmd spellings all work, exactly as in cmd.exe and Far.</summary>
+    [Fact]
+    public void TheCompactSpellingsAreStillACd()
+    {
+        Assert.True(CommandExecutor.TryParseCd("cd..", Base, out string up));
+        Assert.Equal(Path.GetDirectoryName(Base), up);
+
+        Assert.True(CommandExecutor.TryParseCd("cd" + Path.DirectorySeparatorChar, Base, out string root));
+        Assert.Equal(Path.GetPathRoot(Base), root);
+
+        Assert.True(CommandExecutor.TryParseCd("cd/", Base, out string slashRoot));
+        Assert.Equal(Path.GetPathRoot(Base), slashRoot);
+    }
+
+    /// <summary>
+    /// A cd chained to another command belongs to the shell: claiming it internally would silently
+    /// drop everything after the operator.
+    /// </summary>
+    [Fact]
+    public void ACompoundCommandFallsThroughToTheShell()
+    {
+        Assert.False(CommandExecutor.TryParseCd("cd sub && dotnet build", Base, out _));
+        Assert.False(CommandExecutor.TryParseCd("cd sub | sort", Base, out _));
+        Assert.False(CommandExecutor.TryParseCd("cd sub > out.txt", Base, out _));
+
+        // Inside quotes the operator is just a character in the folder name.
+        Assert.True(CommandExecutor.TryParseCd("cd \"a & b\"", Base, out string quoted));
+        Assert.Equal(Path.Combine(Base, "a & b"), quoted);
     }
 
     [Fact]

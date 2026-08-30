@@ -14,10 +14,13 @@ namespace OpenCommander.Tests;
 /// </summary>
 public class KeyRoutingTests
 {
-    private static Application Build(string root)
+    private static Application Build(string root, Action<Settings>? configure = null)
     {
+        var settings = new Settings { ShowClock = false };
+        configure?.Invoke(settings);
+
         Terminal terminal = Terminal.Create(120, 40);
-        var app = new Application(terminal, new Settings { ShowClock = false }, Theme.FarDefault(), input: null);
+        var app = new Application(terminal, settings, Theme.FarDefault(), input: null);
 
         app.Initialize(new CommandLineArgs { LeftPath = root, RightPath = root });
         return app;
@@ -297,5 +300,260 @@ public class KeyRoutingTests
 
         Assert.Equal("Folder tree", binding.Description);
         Assert.Equal("Tree", KeyBarSets.Alt[9]);
+    }
+
+    // ------------------------------------------------------------- quick search routing
+
+    /// <summary>
+    /// The regression guard for the search that could only be typed with Alt held: once Alt+letter
+    /// has opened the box, plain letters must keep feeding it - the panel gets first pick - instead
+    /// of landing on the command line.
+    /// </summary>
+    [Fact]
+    public void QuickSearchContinuesWithoutHoldingAlt()
+    {
+        using var tree = new ShellTree("search-plain");
+        using Application app = Build(tree.Root);
+
+        // Listing order: "..", docs, src, readme.md, notes.txt.
+        Press(app, ConsoleKey.R, KeyMods.Alt, 'r');
+        Assert.True(app.LeftFilePanel.Search.IsActive);
+        Assert.Equal("readme.md", app.LeftFilePanel.Current?.Name);
+
+        Press(app, ConsoleKey.E, KeyMods.None, 'e');
+        Assert.True(app.LeftFilePanel.Search.IsActive);
+        Assert.Equal("re", app.LeftFilePanel.Search.Text);
+        Assert.Equal("readme.md", app.LeftFilePanel.Current?.Name);
+
+        // Not a single character may have leaked onto the command line.
+        Assert.Equal(string.Empty, app.CommandLineWidget.Text);
+
+        Press(app, ConsoleKey.Escape);
+        Assert.False(app.LeftFilePanel.Search.IsActive);
+        Assert.Equal(string.Empty, app.CommandLineWidget.Text);
+    }
+
+    /// <summary>Ctrl+Enter walks to the next match while the box is open, as in Far.</summary>
+    [Fact]
+    public void QuickSearchCtrlEnterWalksToTheNextMatch()
+    {
+        using var tree = new ShellTree("search-next");
+        using Application app = Build(tree.Root);
+
+        // "o" prefixes nothing, so the first containing name wins: docs.
+        Press(app, ConsoleKey.O, KeyMods.Alt, 'o');
+        Assert.Equal("docs", app.LeftFilePanel.Current?.Name);
+
+        // The next name containing an "o" is notes.txt.
+        Press(app, ConsoleKey.Enter, KeyMods.Ctrl, '\r');
+        Assert.True(app.LeftFilePanel.Search.IsActive);
+        Assert.Equal("notes.txt", app.LeftFilePanel.Current?.Name);
+    }
+
+    /// <summary>Enter closes the box without activating the entry under the cursor.</summary>
+    [Fact]
+    public void EnterOnlyClosesTheQuickSearchBox()
+    {
+        using var tree = new ShellTree("search-enter");
+        using Application app = Build(tree.Root);
+
+        Press(app, ConsoleKey.D, KeyMods.Alt, 'd');
+        Assert.Equal("docs", app.LeftFilePanel.Current?.Name);
+
+        Press(app, ConsoleKey.Enter, KeyMods.None, '\r');
+        Assert.False(app.LeftFilePanel.Search.IsActive);
+
+        // The panel is still in the root: the folder was not entered.
+        Assert.Equal(tree.Root, app.LeftFilePanel.CurrentPath);
+    }
+
+    /// <summary>Switching panels closes a half-typed search rather than leaving the box behind.</summary>
+    [Fact]
+    public void SwitchingPanelsCancelsTheQuickSearch()
+    {
+        using var tree = new ShellTree("search-tab");
+        using Application app = Build(tree.Root);
+
+        Press(app, ConsoleKey.D, KeyMods.Alt, 'd');
+        Assert.True(app.LeftFilePanel.Search.IsActive);
+
+        Press(app, ConsoleKey.Tab);
+        Assert.Same(app.RightFilePanel, app.ActivePanel);
+        Assert.False(app.LeftFilePanel.Search.IsActive);
+    }
+
+    // ------------------------------------------------------------- Ctrl+[ / Ctrl+]
+
+    /// <summary>What the console cooks Ctrl+[ into: the ESC control character.</summary>
+    private const char CtrlLeftBracketChar = (char)27;
+
+    /// <summary>What the console cooks Ctrl+] into: the GS control character.</summary>
+    private const char CtrlRightBracketChar = (char)29;
+
+    private static string QuotedPath(string path) =>
+        path.Contains(' ', StringComparison.Ordinal) ? "\"" + path + "\"" : path;
+
+    /// <summary>
+    /// Far's Ctrl+[ and Ctrl+] put the left and the right panel's folder on the command line, each
+    /// with a trailing space so the next argument can follow at once.
+    /// </summary>
+    [Fact]
+    public void CtrlBracketsInsertThePanelPaths()
+    {
+        using var tree = new ShellTree("bracket");
+        using Application app = Build(tree.Root);
+        app.RightFilePanel.Navigate(Path.Combine(tree.Root, "docs"));
+
+        Press(app, ConsoleKey.Oem4, KeyMods.Ctrl, CtrlLeftBracketChar);
+        Press(app, ConsoleKey.Oem6, KeyMods.Ctrl, CtrlRightBracketChar);
+
+        Assert.Equal(
+            QuotedPath(app.LeftFilePanel.CurrentPath) + " " + QuotedPath(app.RightFilePanel.CurrentPath) + " ",
+            app.CommandLineWidget.Text);
+    }
+
+    /// <summary>A folder with a space in its path is quoted, or the shell would split it.</summary>
+    [Fact]
+    public void CtrlBracketQuotesAPathContainingASpace()
+    {
+        using var tree = new ShellTree("bracket-quote");
+        Directory.CreateDirectory(Path.Combine(tree.Root, "my docs"));
+
+        using Application app = Build(tree.Root);
+        app.LeftFilePanel.Navigate(Path.Combine(tree.Root, "my docs"));
+
+        Press(app, ConsoleKey.Oem4, KeyMods.Ctrl, CtrlLeftBracketChar);
+
+        Assert.Equal("\"" + app.LeftFilePanel.CurrentPath + "\" ", app.CommandLineWidget.Text);
+    }
+
+    /// <summary>
+    /// A layout without the brackets on Oem4/Oem6 delivers a different virtual key, so the chord
+    /// must also answer by its character - the literal, or the control character the console cooks
+    /// it into - exactly like the panel's Ctrl+\.
+    /// </summary>
+    [Theory]
+    [InlineData('[', true)]
+    [InlineData((char)27, true)]
+    [InlineData(']', false)]
+    [InlineData((char)29, false)]
+    public void CtrlBracketsWorkByCharacterOnNonUsLayouts(char ch, bool left)
+    {
+        using var tree = new ShellTree("bracket-char");
+        using Application app = Build(tree.Root);
+        app.RightFilePanel.Navigate(Path.Combine(tree.Root, "docs"));
+
+        Press(app, (ConsoleKey)0, KeyMods.Ctrl, ch);
+
+        FilePanel panel = left ? app.LeftFilePanel : app.RightFilePanel;
+        Assert.Equal(QuotedPath(panel.CurrentPath) + " ", app.CommandLineWidget.Text);
+    }
+
+    // ------------------------------------------------------------- F8 / Shift+F8
+
+    /// <summary>
+    /// Far's Shift+F8 ignores the selection and deletes only the item under the cursor; the
+    /// permanent, bypass-the-recycle-bin variant lives on Shift+Del.
+    /// </summary>
+    [Fact]
+    public void ShiftF8DeletesOnlyTheItemUnderTheCursor()
+    {
+        using var tree = new ShellTree("del-cursor");
+        using Application app = Build(tree.Root, static s =>
+        {
+            s.ConfirmDelete = false;
+            s.UseRecycleBin = false; // keep the test out of the real recycle bin
+        });
+
+        app.LeftFilePanel.SelectAllFiles();
+        Assert.Equal(2, TaggedCount(app.LeftFilePanel));
+
+        Press(app, ConsoleKey.End); // the cursor lands on the last file of the listing
+        string victim = app.LeftFilePanel.Current!.Name;
+        Press(app, ConsoleKey.F8, KeyMods.Shift);
+
+        string other = victim == "notes.txt" ? "readme.md" : "notes.txt";
+        Assert.False(File.Exists(Path.Combine(tree.Root, victim)));
+        Assert.True(File.Exists(Path.Combine(tree.Root, other)));
+    }
+
+    /// <summary>Plain F8 still takes the whole selection.</summary>
+    [Fact]
+    public void F8DeletesTheWholeSelection()
+    {
+        using var tree = new ShellTree("del-all");
+        using Application app = Build(tree.Root, static s =>
+        {
+            s.ConfirmDelete = false;
+            s.UseRecycleBin = false;
+        });
+
+        app.LeftFilePanel.SelectAllFiles();
+        Press(app, ConsoleKey.F8);
+
+        Assert.False(File.Exists(Path.Combine(tree.Root, "readme.md")));
+        Assert.False(File.Exists(Path.Combine(tree.Root, "notes.txt")));
+    }
+
+    /// <summary>
+    /// The descriptions must not lie: Shift+F8 is the cursor-only delete that still honours the
+    /// recycle bin setting, and only Shift+Del bypasses the bin.
+    /// </summary>
+    [Fact]
+    public void TheDeleteChordsSayWhatTheyDo()
+    {
+        KeyBindings.Binding shiftF8 = Assert.IsType<KeyBindings.Binding>(
+            KeyBindings.Default.Find(KeyMods.Shift, ConsoleKey.F8));
+        KeyBindings.Binding shiftDel = Assert.IsType<KeyBindings.Binding>(
+            KeyBindings.Default.Find(KeyMods.Shift, ConsoleKey.Delete));
+
+        Assert.Equal("Delete the item under the cursor", shiftF8.Description);
+        Assert.Equal("Delete permanently, bypassing the recycle bin", shiftDel.Description);
+    }
+
+    // ------------------------------------------------------------- non-empty folder confirmation
+
+    /// <summary>
+    /// Deleting a folder with content asks a second time, as Far does. Headless, the question
+    /// cannot be answered, so the observable behaviour is that the folder survives even with the
+    /// general delete confirmation switched off.
+    /// </summary>
+    [Fact]
+    public void ANonEmptyFolderIsNotDeletedWithoutAnAnswer()
+    {
+        using var tree = new ShellTree("del-nonempty");
+        using Application app = Build(tree.Root, static s =>
+        {
+            s.ConfirmDelete = false;
+            s.UseRecycleBin = false;
+        });
+
+        Press(app, ConsoleKey.D, KeyMods.Alt, 'd'); // quick search puts the cursor on docs
+        Press(app, ConsoleKey.Escape);
+        Assert.Equal("docs", app.LeftFilePanel.Current?.Name);
+
+        Press(app, ConsoleKey.F8);
+
+        Assert.True(Directory.Exists(Path.Combine(tree.Root, "docs")));
+    }
+
+    /// <summary>An empty folder raises no such question and goes at once.</summary>
+    [Fact]
+    public void AnEmptyFolderIsDeletedWithoutTheExtraQuestion()
+    {
+        using var tree = new ShellTree("del-empty");
+        using Application app = Build(tree.Root, static s =>
+        {
+            s.ConfirmDelete = false;
+            s.UseRecycleBin = false;
+        });
+
+        Press(app, ConsoleKey.S, KeyMods.Alt, 's'); // quick search puts the cursor on src
+        Press(app, ConsoleKey.Escape);
+        Assert.Equal("src", app.LeftFilePanel.Current?.Name);
+
+        Press(app, ConsoleKey.F8);
+
+        Assert.False(Directory.Exists(Path.Combine(tree.Root, "src")));
     }
 }

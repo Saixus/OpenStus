@@ -280,7 +280,9 @@ public class FileViewerRenderTests
 
         string status = rows[9];
         Assert.Contains("Col 0", status, StringComparison.Ordinal);
-        Assert.Contains("0%", status, StringComparison.Ordinal);
+
+        // The whole file is on screen, and Far's percentage tracks the bottom of the viewport.
+        Assert.Contains("100%", status, StringComparison.Ordinal);
         Assert.Contains("UTF-8", status, StringComparison.Ordinal);
         Assert.Contains("LF", status, StringComparison.Ordinal);
         Assert.Empty(ui.Shown);
@@ -323,8 +325,9 @@ public class FileViewerRenderTests
     public void TogglingHexBackToTextLandsOnALineStart()
     {
         // Sixteen byte lines, so the hex row grid and the line grid coincide and the round trip
-        // is exact rather than rounded down to the row the line started in.
-        using var file = new TempFile("0123456789abcde\n0123456789abcde\n0123456789abcde\n");
+        // is exact rather than rounded down to the row the line started in. Enough of them that
+        // the listing overflows the page - scrolling refuses once the end of the file is visible.
+        using var file = new TempFile(string.Concat(Enumerable.Repeat("0123456789abcde\n", 12)));
         var ui = new FakeUi();
         using var viewer = new FileViewer(Palette, ui, file.Path);
 
@@ -369,12 +372,59 @@ public class FileViewerRenderTests
     }
 
     [Fact]
+    public void ScrollingDownStopsOnceTheEndOfTheFileIsVisible()
+    {
+        var content = new StringBuilder();
+        for (int i = 0; i < 12; i++)
+        {
+            content.Append("line").Append(i.ToString("000")).Append('\n');
+        }
+
+        using var file = new TempFile(content.ToString());
+        var ui = new FakeUi();
+        using var viewer = new FileViewer(Palette, ui, file.Path);
+
+        viewer.RenderToText(40, 10);
+        for (int i = 0; i < 50; i++)
+        {
+            viewer.HandleInput(Key(ConsoleKey.DownArrow));
+        }
+
+        // Far stops when the last line reaches the bottom row - exactly where Ctrl+End lands -
+        // rather than scrolling on until the screen is blank but for the final line at the top.
+        Assert.Equal(viewer.Model!.LastPageOffset(8), viewer.TopOffset);
+        Assert.Equal("line004", viewer.RenderToText(40, 10).Split('\n')[1].Trim());
+    }
+
+    [Fact]
+    public void ThePercentageTracksTheBottomOfTheScreenAndReachesOneHundredAtTheEnd()
+    {
+        var content = new StringBuilder();
+        for (int i = 0; i < 100; i++)
+        {
+            content.Append("line").Append(i.ToString("000")).Append('\n');
+        }
+
+        using var file = new TempFile(content.ToString());
+        var ui = new FakeUi();
+        using var viewer = new FileViewer(Palette, ui, file.Path);
+
+        // Eight of one hundred lines visible: the bottom of the screen is 8% into the file.
+        Assert.Contains("8%", viewer.RenderToText(40, 10).Split('\n')[9], StringComparison.Ordinal);
+
+        viewer.HandleInput(Key(ConsoleKey.End, KeyMods.Ctrl));
+        Assert.Contains("100%", viewer.RenderToText(40, 10).Split('\n')[9], StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void UnwrappedModeScrollsHorizontallyAndReportsTheColumn()
     {
         using var file = new TempFile("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ\nshort\n");
         var ui = new FakeUi();
         using var viewer = new FileViewer(Palette, ui, file.Path);
 
+        // Wrap is on by default, matching Far; horizontal scrolling needs it off.
+        viewer.HandleInput(Key(ConsoleKey.F2));
         viewer.HandleInput(Key(ConsoleKey.RightArrow, KeyMods.Ctrl));
 
         string[] rows = viewer.RenderToText(40, 6).Split('\n');
@@ -385,13 +435,13 @@ public class FileViewerRenderTests
     }
 
     [Fact]
-    public void WrapModeBreaksALongLineIntoViewportWidthRows()
+    public void WrapIsOnByDefaultAndBreaksALongLineIntoViewportWidthRows()
     {
         using var file = new TempFile(new string('a', 30) + new string('b', 20) + "\n");
         var ui = new FakeUi();
         using var viewer = new FileViewer(Palette, ui, file.Path);
 
-        Assert.True(viewer.HandleInput(Key(ConsoleKey.F2)));
+        // Far's viewer ships with line wrap enabled; F2 toggles it off.
         Assert.True(viewer.Wrap);
 
         string[] rows = viewer.RenderToText(20, 8).Split('\n');
@@ -399,6 +449,9 @@ public class FileViewerRenderTests
         Assert.Equal(new string('a', 20), rows[1]);
         Assert.Equal(new string('a', 10) + new string('b', 10), rows[2]);
         Assert.Equal(new string('b', 10), rows[3]);
+
+        Assert.True(viewer.HandleInput(Key(ConsoleKey.F2)));
+        Assert.False(viewer.Wrap);
     }
 
     [Fact]
@@ -485,15 +538,16 @@ public class FileViewerRenderTests
         using var file = new TempFile("x\n");
         using var viewer = new FileViewer(Palette, new FakeUi(), file.Path);
 
+        // Wrap starts on, so F2's caption offers the way back out of it.
         Assert.Equal(
-            new[] { "Help", "Wrap", "Quit", "Hex", "Goto", "", "Search", "", "", "Quit", "", "Screen" },
+            new[] { "Help", "Unwrap", "Quit", "Hex", "Goto", "", "Search", "", "", "Quit", "", "Screen" },
             viewer.KeyBarFor(KeyMods.None)!.Labels);
 
         viewer.HandleInput(Key(ConsoleKey.F2));
         viewer.HandleInput(Key(ConsoleKey.F4));
 
         var bar = viewer.KeyBarFor(KeyMods.None)!;
-        Assert.Equal("Unwrap", bar[1]);
+        Assert.Equal("Wrap", bar[1]);
         Assert.Equal("Text", bar[3]);
         Assert.Equal("Next", viewer.KeyBarFor(KeyMods.Shift)![6]);
     }

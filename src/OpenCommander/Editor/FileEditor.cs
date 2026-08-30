@@ -74,7 +74,11 @@ public sealed class FileEditor : IScreenComponent
         }
     }
 
-    /// <summary>Edits a document already in memory; used by the tests and by "edit new file".</summary>
+    /// <summary>
+    /// Edits a document already in memory - the tests and other in-memory callers use this.
+    /// Shift+F4 goes through <see cref="TryOpen"/> instead, so a name that already exists on disk
+    /// opens the file rather than shadowing it with an empty buffer.
+    /// </summary>
     /// <param name="theme">The colour scheme.</param>
     /// <param name="ui">Modal services.</param>
     /// <param name="buffer">The document to edit.</param>
@@ -196,7 +200,7 @@ public sealed class FileEditor : IScreenComponent
                 return HandleKey(ev.Key);
 
             case InputKind.Mouse when ev.Mouse.Kind == MouseKind.Wheel:
-                _topLine = Math.Clamp(_topLine + (ev.Mouse.Wheel > 0 ? -3 : 3), 0, Math.Max(0, _buffer.LineCount - 1));
+                ScrollView(ev.Mouse.Wheel > 0 ? -3 : 3);
                 return true;
 
             default:
@@ -393,11 +397,11 @@ public sealed class FileEditor : IScreenComponent
                 return true;
 
             case ConsoleKey.UpArrow when CtrlOnly(key):
-                _topLine = Math.Max(0, _topLine - 1);
+                ScrollView(-1);
                 return true;
 
             case ConsoleKey.DownArrow when CtrlOnly(key):
-                _topLine = Math.Clamp(_topLine + 1, 0, Math.Max(0, _buffer.LineCount - 1));
+                ScrollView(1);
                 return true;
 
             case ConsoleKey.PageUp when NoCtrlAlt(key):
@@ -505,6 +509,29 @@ public sealed class FileEditor : IScreenComponent
     {
         _buffer.BreakUndoRun();
         motion();
+    }
+
+    /// <summary>
+    /// Scrolls the viewport without an explicit caret motion (Ctrl+Up/Down, the mouse wheel),
+    /// dragging the caret along when it would fall off screen. Far scrolls the same way - and
+    /// without the drag the next draw's <see cref="ScrollIntoView"/> would simply snap the view
+    /// straight back to the caret, turning the key into a visible no-op.
+    /// </summary>
+    /// <param name="delta">How many lines to scroll; negative scrolls up.</param>
+    private void ScrollView(int delta)
+    {
+        int rows = Math.Max(1, TextRows);
+        _topLine = Math.Clamp(_topLine + delta, 0, Math.Max(0, _buffer.LineCount - 1));
+
+        int line = Math.Clamp(
+            _cursor.Line,
+            _topLine,
+            Math.Min(_buffer.LineCount - 1, _topLine + rows - 1));
+
+        if (line != _cursor.Line)
+        {
+            Move(() => _cursor.MoveVertical(_buffer, line - _cursor.Line));
+        }
     }
 
     // ---- editing operations -----------------------------------------------------------------------
@@ -697,7 +724,10 @@ public sealed class FileEditor : IScreenComponent
             return;
         }
 
-        FindFrom(_cursor.Line, _cursor.Column + 1, report: true);
+        // Start exactly at the caret: a fresh search then finds a match sitting under it, and a
+        // continued one - the caret is already just past the previous match - finds an occurrence
+        // beginning flush against it. Far behaves the same way on F7 and Shift+F7.
+        FindFrom(_cursor.Line, _cursor.Column, report: true);
     }
 
     private bool FindFrom(int line, int column, bool report)

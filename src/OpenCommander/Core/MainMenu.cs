@@ -83,7 +83,7 @@ public static class MainMenu
             new MenuItem("&Rename or move", "F6", () => app.MoveFiles(currentOnly: false)),
             new MenuItem("&Make folder", "F7", app.MakeDirectory),
             new MenuItem("&Delete", "F8", () => app.DeleteFiles(permanent: false)),
-            new MenuItem("Delete &permanently", "Shift+F8", () => app.DeleteFiles(permanent: true)),
+            new MenuItem("Delete &permanently", "Shift+Del", () => app.DeleteFiles(permanent: true)),
             MenuItem.Separator(),
             new MenuItem("&Folder size", "Ctrl+L", app.ShowDirectorySize),
             new MenuItem("Copy &names to clipboard", "Ctrl+Ins", () => app.CopyNamesToClipboard(fullPaths: false)),
@@ -165,6 +165,10 @@ public static class MainMenu
             new MenuItem("Confirm de&lete", null, () => app.ToggleSetting(v => s.ConfirmDelete = v, s.ConfirmDelete, reload: false))
             {
                 Checked = s.ConfirmDelete,
+            },
+            new MenuItem("Confirm delete of non-empt&y folders", null, () => app.ToggleSetting(v => s.ConfirmDeleteNonEmptyFolders = v, s.ConfirmDeleteNonEmptyFolders, reload: false))
+            {
+                Checked = s.ConfirmDeleteNonEmptyFolders,
             },
             new MenuItem("Use the &recycle bin", null, () => app.ToggleSetting(v => s.UseRecycleBin = v, s.UseRecycleBin, reload: false))
             {

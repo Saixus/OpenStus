@@ -355,7 +355,9 @@ public sealed class Theme
         const ConsoleColor black = ConsoleColor.Black;          // F_BLACK      index 0
         const ConsoleColor darkGray = ConsoleColor.DarkGray;    // F_DARKGRAY   index 8
         const ConsoleColor lightGray = ConsoleColor.Gray;       // F_LIGHTGRAY  index 7
+        const ConsoleColor darkCyan = ConsoleColor.DarkCyan;    // F_CYAN       index 3
         const ConsoleColor lightCyan = ConsoleColor.Cyan;       // F_LIGHTCYAN  index 11
+        const ConsoleColor lightGreen = ConsoleColor.Green;     // F_LIGHTGREEN index 10
         const ConsoleColor yellow = ConsoleColor.Yellow;        // F_YELLOW     index 14
         const ConsoleColor white = ConsoleColor.White;          // F_WHITE      index 15
 
@@ -383,10 +385,13 @@ public sealed class Theme
         t.PanelText = new CellStyle(lightCyan, bBlue);           // COL_PANELTEXT            :76
 
         // File-type colours: not palette entries in Far, they come from Highlight.farconfig.
-        t.PanelDirectory = new CellStyle(white, bBlue);          // no Far palette entry
-        t.PanelHidden = new CellStyle(darkGray, bBlue);          // no Far palette entry
-        t.PanelExecutable = new CellStyle(white, bBlue);         // no Far palette entry
-        t.PanelArchive = new CellStyle(ConsoleColor.Magenta, bBlue); // no Far palette entry
+        // Directories are white, the <exec> group (*.exe, *.com, *.bat, *.cmd) light green, and
+        // hidden or system entries dark cyan - which is what keeps executables distinguishable
+        // from folders on a stock Far screen.
+        t.PanelDirectory = new CellStyle(white, bBlue);          // Highlight.farconfig: <folder>
+        t.PanelHidden = new CellStyle(darkCyan, bBlue);          // Highlight.farconfig: hidden/system
+        t.PanelExecutable = new CellStyle(lightGreen, bBlue);    // Highlight.farconfig: <exec>
+        t.PanelArchive = new CellStyle(ConsoleColor.Magenta, bBlue); // Highlight.farconfig: <arc>
 
         t.PanelSelectedFile = new CellStyle(yellow, bBlue);      // COL_PANELSELECTEDTEXT    :77
         t.PanelCursor = new CellStyle(black, bCyan);             // COL_PANELCURSOR          :80

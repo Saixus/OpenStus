@@ -357,6 +357,25 @@ public class InputTests
     }
 
     // ---------------------------------------------------------------------------------------
+    // Alt+numpad composition
+    // ---------------------------------------------------------------------------------------
+
+    [Theory]
+    [InlineData(0x12, false, 'é', true)]      // VK_MENU key-up carrying the composed character
+    [InlineData(0x12, false, '©', true)]      // Alt+0169: any composed character counts
+    [InlineData(0x12, false, '\0', false)]    // an ordinary Alt release composes nothing
+    [InlineData(0x12, true, 'é', false)]      // a key-down never carries the composition
+    [InlineData(0x41, false, 'a', false)]     // a plain key-up is still discarded
+    public void IsAltNumpadComposition_OnlyMatchesTheAltKeyUpWithACharacter(
+        int virtualKey, bool keyDown, char ch, bool expected)
+    {
+        // Windows delivers the Alt+numpad character in the VK_MENU key-UP record and nowhere
+        // else; the dispatcher must accept exactly that record and no other, or Alt-code entry
+        // silently dies (the record would fall into the modifier filter).
+        Assert.Equal(expected, WindowsConsoleInput.IsAltNumpadComposition(virtualKey, keyDown, ch));
+    }
+
+    // ---------------------------------------------------------------------------------------
     // dwControlKeyState -> KeyMods
     // ---------------------------------------------------------------------------------------
 

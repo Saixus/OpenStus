@@ -13,7 +13,8 @@ namespace OpenCommander.Ui;
 /// <para>
 /// Left and Right walk the titles - and, when a pull-down is open, close it and open the neighbour,
 /// so holding Right sweeps through the whole menu system exactly like Far. Down or Enter opens the
-/// selected pull-down, Esc closes it, and a second Esc closes the bar.
+/// selected pull-down, and a single Esc dismisses the whole menu system whether or not a pull-down
+/// is open - the bar-only state exists only between F9 and the first pull-down, as in Far.
 /// </para>
 /// <para>
 /// The bar reports the chosen leaf through <see cref="ChosenItem"/>. <see cref="RunModal"/> is the
@@ -331,7 +332,10 @@ public sealed class MenuBar : IScreenComponent
 
         if (popup.Result < 0)
         {
-            return; // Esc inside the pull-down: back to the bar
+            // Esc (or a click elsewhere) inside the pull-down: Far dismisses the whole menu
+            // system in one go, never dropping back to a bare bar.
+            Close();
+            return;
         }
 
         ChosenItem = popup.ChosenItem;

@@ -195,6 +195,29 @@ public class FileEntryComparerTests
     }
 
     [Fact]
+    public void ExtensionSortingIgnoresDirectoryExtensions()
+    {
+        FileEntry[] entries = [Dir("bin"), Dir("archive.old"), File("z.aaa"), File("a.zip")];
+
+        // Far's default: a folder named "archive.old" is not an "old" file, so directories
+        // order purely by name among themselves.
+        Assert.Equal(["archive.old", "bin", "z.aaa", "a.zip"], Order(Comparer(SortMode.Extension), entries));
+
+        // Reverse flips the key alone; the directories' empty keys stay equal, so the name
+        // fallback keeps them ascending.
+        Assert.Equal(["archive.old", "bin", "a.zip", "z.aaa"], Order(Comparer(SortMode.Extension, reverse: true), entries));
+    }
+
+    [Fact]
+    public void UngroupedExtensionSortingTreatsAFolderExtensionAsEmpty()
+    {
+        FileEntry[] entries = [File("a.cs"), Dir("readme.txt"), File("plain")];
+
+        // The directory keeps its empty key even mixed in with the files.
+        Assert.Equal(["plain", "readme.txt", "a.cs"], Order(Comparer(SortMode.Extension, directoriesFirst: false), entries));
+    }
+
+    [Fact]
     public void SizeSortingOrdersByBytes()
     {
         FileEntry[] entries = [File("big", 5000), File("small", 10), File("medium", 900)];

@@ -4,8 +4,9 @@ using OpenCommander.Rendering;
 namespace OpenCommander.Ui.Controls;
 
 /// <summary>
-/// A two-state check box drawn as <c>[x] Caption</c>, toggled with Space, Enter, a click or its
-/// Alt+hotkey.
+/// A two-state check box drawn as <c>[x] Caption</c>, toggled with Space, a click or its
+/// Alt+hotkey. Enter is left for the dialog, which presses the default button - as in Far, where
+/// confirming a dialog never flips the option the focus happens to sit on.
 /// </summary>
 public sealed class CheckBoxControl : DialogControl
 {
@@ -80,7 +81,9 @@ public sealed class CheckBoxControl : DialogControl
     /// <inheritdoc/>
     public override bool HandleKey(KeyEvent key)
     {
-        if (key.Is(ConsoleKey.Spacebar) || key.Is(ConsoleKey.Enter))
+        // Space toggles; Enter deliberately falls through to the dialog so it can press the
+        // default button instead of flipping this box.
+        if (key.Is(ConsoleKey.Spacebar))
         {
             Activate();
             return true;

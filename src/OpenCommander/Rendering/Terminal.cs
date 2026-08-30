@@ -59,6 +59,12 @@ public sealed class Terminal : IDisposable
     private int _cursorX;
     private int _cursorY;
     private bool _cursorVisible;
+    private bool _lastEmittedCursorVisible;
+
+    // The raw input mode captured by SuspendConsoleInputMode, so RestoreConsoleInputMode can put
+    // back exactly what the input backend had established - mouse reporting bits included.
+    private uint _suspendedRawInMode;
+    private bool _inputModeSuspended;
 
     private Encoding? _savedOutputEncoding;
 
@@ -285,12 +291,137 @@ public sealed class Terminal : IDisposable
         }
     }
 
+    /// <summary>
+    /// <see langword="true"/> while the alternate screen buffer is up - the normal state. It goes
+    /// down around a child command and while Ctrl+O shows the user screen.
+    /// </summary>
+    public bool OnAlternateScreen => _altScreen;
+
+    /// <summary>
+    /// Leaves the alternate screen buffer so the primary one - the user screen, with the output of
+    /// every command run so far - becomes visible. This is what Ctrl+O shows in Far: the point of
+    /// the key is that command output survives underneath the panels. While the user screen is up
+    /// the caller must not <see cref="Render"/>; a frame written now would scribble over the very
+    /// output being shown. A no-op when headless or already on the primary buffer.
+    /// </summary>
+    public void ShowUserScreen()
+    {
+        lock (_sync)
+        {
+            if (_writer is null || !_altScreen)
+            {
+                return;
+            }
+
+            // End any open synchronized update, put autowrap and the colours back, show the
+            // cursor, and only then switch buffers - the same order the epilogue uses.
+            _writer.Write(Esc + "[?2026l" + Esc + "[?7h" + Esc + "[0m" + Esc + "[?25h" + Esc + "[?1049l");
+            _writer.Flush();
+            _altScreen = false;
+        }
+    }
+
+    /// <summary>
+    /// Returns from the user screen to the alternate buffer and forces the next
+    /// <see cref="Render"/> to repaint everything. A no-op when headless or already up.
+    /// </summary>
+    public void ShowPanelsScreen()
+    {
+        lock (_sync)
+        {
+            if (_writer is null || _altScreen)
+            {
+                return;
+            }
+
+            _writer.Write(Prologue);
+            _writer.Flush();
+            _altScreen = true;
+            _forceFull = true;
+        }
+    }
+
+    /// <summary>
+    /// Writes raw text straight to the user screen, bypassing the cell buffer - the Ctrl+O prompt
+    /// echo uses this. Ignored while the alternate buffer is up, where every write must go through
+    /// the diff.
+    /// </summary>
+    /// <param name="text">The text, VT escapes allowed.</param>
+    public void WriteUserScreen(string text)
+    {
+        lock (_sync)
+        {
+            if (_writer is null || _altScreen || string.IsNullOrEmpty(text))
+            {
+                return;
+            }
+
+            _writer.Write(text);
+            _writer.Flush();
+        }
+    }
+
     /// <summary>Positions the hardware cursor, applied at the end of the next <see cref="Render"/>.</summary>
     public void SetCursor(int x, int y, bool visible)
     {
         _cursorX = x;
         _cursorY = y;
         _cursorVisible = visible;
+    }
+
+    /// <summary>
+    /// Puts the console input buffer back into the cooked mode captured at startup, for the
+    /// benefit of a child process about to run on this console. The input mode is a property of
+    /// the shared input buffer that every child inherits; left raw, the child gets no echo, no
+    /// line editing, and a Ctrl+C that queues as an ordinary key instead of interrupting it.
+    /// Pair with <see cref="RestoreConsoleInputMode"/> once the child has exited. A no-op when
+    /// headless, off Windows, when the startup mode was never captured, or when already suspended.
+    /// </summary>
+    public void SuspendConsoleInputMode()
+    {
+        if (IsHeadless || !OperatingSystem.IsWindows() || !_haveInMode || _inputModeSuspended)
+        {
+            return;
+        }
+
+        try
+        {
+            // The mode in force now is not _savedInMode: the input backend layered its own raw
+            // mode on top after startup. Capture whatever is current so the restore re-applies
+            // exactly that.
+            if (NativeMethods.GetConsoleMode(_hIn, out uint current))
+            {
+                _suspendedRawInMode = current;
+                _inputModeSuspended = NativeMethods.SetConsoleMode(_hIn, _savedInMode);
+            }
+        }
+        catch
+        {
+            // Not a real console; the child takes whatever mode there is.
+        }
+    }
+
+    /// <summary>
+    /// Re-applies the raw input mode captured by <see cref="SuspendConsoleInputMode"/>. A no-op
+    /// when nothing is suspended, so the pair is safe to call unconditionally around a child.
+    /// </summary>
+    public void RestoreConsoleInputMode()
+    {
+        if (!_inputModeSuspended)
+        {
+            return;
+        }
+
+        _inputModeSuspended = false;
+
+        try
+        {
+            NativeMethods.SetConsoleMode(_hIn, _suspendedRawInMode);
+        }
+        catch
+        {
+            // The console went away while the child ran; there is nothing to put back.
+        }
     }
 
     /// <summary>
@@ -412,7 +543,11 @@ public sealed class Terminal : IDisposable
         bool painted = sb.Length > prefix;
         _forceFull = false;
 
-        if (!painted && !_cursorVisible)
+        // An empty frame is normally discarded whole - but the prefix's "hide the cursor" is
+        // load-bearing when the previous frame ended with the cursor shown: dropping it would
+        // leave the hardware cursor blinking after SetCursor(..., false) that happened to
+        // coincide with a zero-cell diff.
+        if (!painted && !_cursorVisible && !_lastEmittedCursorVisible)
         {
             sb.Clear();
             return;
@@ -425,6 +560,10 @@ public sealed class Terminal : IDisposable
             sb.Append(Esc).Append('[').Append(cy + 1).Append(';').Append(cx + 1).Append('H');
             sb.Append(Esc).Append("[?25h");
         }
+
+        // Every emitted frame ends with the cursor in a known state: shown by the tail above, or
+        // hidden by the prefix. That is what the discard test above relies on.
+        _lastEmittedCursorVisible = _cursorVisible;
 
         sb.Append(Esc).Append("[?2026l");
     }

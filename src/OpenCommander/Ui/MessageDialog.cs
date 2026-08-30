@@ -17,16 +17,22 @@ namespace OpenCommander.Ui;
 public sealed class MessageDialog : Dialog
 {
     /// <summary>The buttons a message box can show, in the order Far lays them out.</summary>
+    /// <remarks>
+    /// Affirmative answers come first and Cancel last, so any set combining them - the overwrite
+    /// prompt's Yes|No|All|SkipAll|Cancel, the error prompt's Retry|Skip|SkipAll|Cancel - starts
+    /// with the affirmative button focused and default. Pressing Enter must overwrite or retry,
+    /// never silently abort the whole operation.
+    /// </remarks>
     private static readonly (MessageButtons Flag, string Caption, DialogResult Result)[] ButtonTable =
     [
         (MessageButtons.Ok, "&Ok", DialogResult.Ok),
-        (MessageButtons.Cancel, "&Cancel", DialogResult.Cancel),
         (MessageButtons.Yes, "&Yes", DialogResult.Yes),
         (MessageButtons.No, "&No", DialogResult.No),
         (MessageButtons.Retry, "&Retry", DialogResult.Retry),
         (MessageButtons.Skip, "&Skip", DialogResult.Skip),
         (MessageButtons.SkipAll, "S&kip all", DialogResult.SkipAll),
         (MessageButtons.All, "&All", DialogResult.All),
+        (MessageButtons.Cancel, "&Cancel", DialogResult.Cancel),
     ];
 
     private readonly string[] _lines;

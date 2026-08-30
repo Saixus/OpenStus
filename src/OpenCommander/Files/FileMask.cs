@@ -12,7 +12,10 @@ namespace OpenCommander.Files;
 /// A mask supports <c>*</c> (any run of characters), <c>?</c> (exactly one character) and character
 /// classes - <c>[abc]</c>, <c>[a-z]</c>, and <c>[!a-z]</c> or <c>[^a-z]</c> to negate. A mask list
 /// separates masks with commas or semicolons, and an item starting with <c>!</c> excludes rather
-/// than includes, so <c>"*.cs,!Generated*"</c> means "C# sources, but nothing generated".
+/// than includes, so <c>"*.cs,!Generated*"</c> means "C# sources, but nothing generated". Far's
+/// own exclude spelling works too: everything after a <c>|</c> is an exclude list, so
+/// <c>"*.cs|*.g.cs"</c> means "C# sources except the generated ones", and an empty include half -
+/// <c>"|*.bak"</c> - includes everything the excludes leave alone.
 /// </para>
 /// <para>
 /// Matching is case-insensitive on Windows and case-sensitive elsewhere, following the file systems
@@ -75,7 +78,8 @@ public static class FileMask
     /// sensitivity.
     /// </summary>
     /// <param name="name">The file name to test.</param>
-    /// <param name="maskList">The comma or semicolon separated list.</param>
+    /// <param name="maskList">The comma or semicolon separated list, optionally followed by
+    /// <c>|</c> and an exclude list.</param>
     /// <returns><see langword="true"/> when the name matches.</returns>
     public static bool IsMatchAny(string? name, string? maskList) =>
         IsMatchAny(name, maskList, DefaultIgnoreCase);
@@ -86,10 +90,12 @@ public static class FileMask
     /// <remarks>
     /// An empty list matches everything - there is nothing to filter by. An excluded name is
     /// rejected whatever else matches, and a list holding only exclusions matches every name they do
-    /// not cover.
+    /// not cover. Exclusions come in two spellings that mix freely: a <c>!</c> prefix on an item,
+    /// and - Far's own syntax - everything after the first <c>|</c>.
     /// </remarks>
     /// <param name="name">The file name to test.</param>
-    /// <param name="maskList">The comma or semicolon separated list.</param>
+    /// <param name="maskList">The comma or semicolon separated list, optionally followed by
+    /// <c>|</c> and an exclude list.</param>
     /// <param name="ignoreCase">Whether to compare case-insensitively.</param>
     /// <returns><see langword="true"/> when the name matches.</returns>
     public static bool IsMatchAny(string? name, string? maskList, bool ignoreCase)
@@ -99,9 +105,34 @@ public static class FileMask
             return false;
         }
 
-        IReadOnlyList<string> items = SplitList(maskList);
+        // Far writes excludes after a '|' - "*.cs|*.g.cs" - so the list splits into an include
+        // half and an exclude half before anything else. Only the first '|' separates; there is
+        // no third section, and a '|' inside a [...] character class is one of the class's own
+        // members, not the separator.
+        string? includeHalf = maskList;
+        string? excludeHalf = null;
+        int bar = IndexOfSeparatorBar(maskList);
+        if (bar >= 0)
+        {
+            includeHalf = maskList![..bar];
+            excludeHalf = maskList[(bar + 1)..];
+        }
+
+        // Everything in the exclude half excludes, whether or not it also carries the '!' prefix.
+        foreach (string item in SplitList(excludeHalf))
+        {
+            string exclude = item[0] == '!' ? item[1..].Trim() : item;
+            if (exclude.Length != 0 && IsMatch(name, exclude, ignoreCase))
+            {
+                return false;
+            }
+        }
+
+        IReadOnlyList<string> items = SplitList(includeHalf);
         if (items.Count == 0)
         {
+            // An empty include half reads "everything except" - Far's "|*.bak" - and an empty
+            // list has nothing to filter by at all.
             return true;
         }
 
@@ -129,6 +160,40 @@ public static class FileMask
         }
 
         return !sawInclude || included;
+    }
+
+    /// <summary>
+    /// The index of the <c>|</c> that separates the include half from the exclude half, ignoring
+    /// any <c>|</c> that sits inside a <c>[...]</c> character class, or <c>-1</c>.
+    /// </summary>
+    /// <param name="maskList">The list to scan.</param>
+    /// <returns>The index, or <c>-1</c> when the list has no separator.</returns>
+    private static int IndexOfSeparatorBar(string? maskList)
+    {
+        if (maskList is null)
+        {
+            return -1;
+        }
+
+        bool inClass = false;
+        for (int i = 0; i < maskList.Length; i++)
+        {
+            switch (maskList[i])
+            {
+                case '[' when !inClass:
+                    inClass = true;
+                    break;
+
+                case ']' when inClass:
+                    inClass = false;
+                    break;
+
+                case '|' when !inClass:
+                    return i;
+            }
+        }
+
+        return -1;
     }
 
     /// <summary>

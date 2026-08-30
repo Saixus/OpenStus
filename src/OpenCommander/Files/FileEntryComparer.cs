@@ -142,7 +142,7 @@ public sealed class FileEntryComparer : IComparer<FileEntry>
     private int CompareKey(FileEntry x, FileEntry y) => Mode switch
     {
         SortMode.Unsorted => 0,
-        SortMode.Extension => CompareNames(x.Extension, y.Extension),
+        SortMode.Extension => CompareNames(SortExtension(x), SortExtension(y)),
         SortMode.Modified => x.Modified.CompareTo(y.Modified),
         SortMode.Created => x.Created.CompareTo(y.Created),
         SortMode.Accessed => x.Accessed.CompareTo(y.Accessed),
@@ -151,6 +151,11 @@ public sealed class FileEntryComparer : IComparer<FileEntry>
         // Name, and the two modes whose data source does not exist yet.
         _ => CompareNames(x.Name, y.Name),
     };
+
+    // A folder named "archive.old" is not an "old" file, and Far's default agrees: sorting by
+    // extension treats a directory's extension as empty, so directories order among themselves
+    // by the name fallback alone.
+    private static string SortExtension(FileEntry e) => e.IsDirectory ? string.Empty : e.Extension;
 
     private int CompareNames(string a, string b)
     {

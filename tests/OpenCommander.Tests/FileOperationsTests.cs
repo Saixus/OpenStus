@@ -448,6 +448,43 @@ public class FileOperationsCopyTests
         Assert.Equal(0, result.FilesProcessed);
         Assert.False(Directory.Exists(temp.Combine("dest")));
     }
+
+    [Fact]
+    public void CopyingADirectoryLinkRecreatesTheLinkOrReportsAnError()
+    {
+        using var temp = new OpsTempDirectory();
+        temp.File(Path.Combine("real", "keep.txt"), "keep");
+        temp.Dir("box");
+
+        if (!OpsTestHelpers.TryCreateDirectoryLink(temp.Combine("box", "link"), temp.Combine("real")))
+        {
+            return;
+        }
+
+        OperationResult result = FileOperations.Copy(
+            OpsTestHelpers.Entries(temp.Combine("box", "link")),
+            temp.Dir("dest"),
+            OpsTestHelpers.Options());
+
+        string copied = temp.Combine("dest", "link");
+        if (result.Success)
+        {
+            // This machine grants the symbolic-link privilege: the copy is a link to the same
+            // place, not a plain folder pretending to be one.
+            Assert.True((File.GetAttributes(copied) & FileAttributes.ReparsePoint) != 0);
+            Assert.Equal("keep", File.ReadAllText(Path.Combine(copied, "keep.txt")));
+        }
+        else
+        {
+            // The privilege is withheld here (a junction cannot be recreated without it): the
+            // failure is reported, and no empty plain folder stands in for the link.
+            Assert.NotEmpty(result.Errors);
+            Assert.False(Directory.Exists(copied));
+        }
+
+        // Either way the source link is untouched by a copy.
+        Assert.True((File.GetAttributes(temp.Combine("box", "link")) & FileAttributes.ReparsePoint) != 0);
+    }
 }
 
 public class FileOperationsOverwriteTests
@@ -601,6 +638,36 @@ public class FileOperationsOverwriteTests
 
         Assert.True(result.Success, string.Join("; ", result.Errors));
         Assert.Equal("head-tail", File.ReadAllText(temp.Combine("dest", "a.txt")));
+    }
+
+    [Fact]
+    public void AFailedAppendCutsTheTargetBackToItsOriginalContent()
+    {
+        using var temp = new OpsTempDirectory();
+        temp.Binary("big.bin", new byte[512 * 1024]);
+        string target = temp.File(Path.Combine("dest", "big.bin"), "head");
+
+        var progress = new OperationProgress();
+        OperationResult result = FileOperations.Copy(
+            OpsTestHelpers.Entries(temp.Combine("big.bin")),
+            temp.Combine("dest"),
+            OpsTestHelpers.Options(o => o.BufferSize = 4096),
+            progress,
+            () =>
+            {
+                // Only pull the plug once a few blocks have really landed, so the cut has
+                // something to cut.
+                if (progress.CurrentFileDone >= 4 * 4096)
+                {
+                    progress.Cancel();
+                }
+            },
+            onOverwrite: OpsTestHelpers.Answer(DialogResult.Append));
+
+        // The partial tail is gone: a retry would append after the real content, not after the
+        // leftovers of the failed attempt.
+        Assert.True(result.Cancelled);
+        Assert.Equal("head", File.ReadAllText(target));
     }
 
     [Fact]
@@ -928,6 +995,42 @@ public class FileOperationsMoveTests
         Assert.False(result.Success);
         Assert.True(File.Exists(temp.Combine("root", "a.txt")));
     }
+
+    [Fact]
+    public void MovingADirectoryLinkAcrossASimulatedVolumeNeverDestroysTheSourceLink()
+    {
+        using var temp = new OpsTempDirectory();
+        temp.File(Path.Combine("real", "keep.txt"), "keep");
+        temp.Dir("box");
+
+        if (!OpsTestHelpers.TryCreateDirectoryLink(temp.Combine("box", "link"), temp.Combine("real")))
+        {
+            return;
+        }
+
+        OperationResult result = FileOperations.Move(
+            OpsTestHelpers.Entries(temp.Combine("box", "link")),
+            temp.Dir("dest"),
+            OpsTestHelpers.Options(o => o.ForceCopyThenDelete = true));
+
+        string moved = temp.Combine("dest", "link");
+        if (result.Success)
+        {
+            // The link travelled whole: recreated at the destination, removed from the source.
+            Assert.True((File.GetAttributes(moved) & FileAttributes.ReparsePoint) != 0);
+            Assert.False(Directory.Exists(temp.Combine("box", "link")));
+            Assert.Equal("keep", File.ReadAllText(Path.Combine(moved, "keep.txt")));
+        }
+        else
+        {
+            // Recreation failed, so nothing was transferred - the source link must survive.
+            Assert.True((File.GetAttributes(temp.Combine("box", "link")) & FileAttributes.ReparsePoint) != 0);
+            Assert.False(Directory.Exists(moved));
+        }
+
+        // Whatever happened to the link, the folder it points at is never harmed.
+        Assert.Equal("keep", File.ReadAllText(temp.Combine("real", "keep.txt")));
+    }
 }
 
 public class FileOperationsDeleteTests
@@ -1073,6 +1176,38 @@ public class FileOperationsDeleteTests
         Assert.True(result.Success, string.Join("; ", result.Errors));
         Assert.False(File.Exists(path));
         Assert.Equal(1, result.FilesProcessed);
+    }
+
+    [Fact]
+    public void ARecycledReadOnlyFileIsConfirmedThroughTheErrorPrompt()
+    {
+        if (!RecycleBin.IsAvailable)
+        {
+            // No recycle bin, no recycle path; the permanent path's confirmation is covered above.
+            return;
+        }
+
+        using var temp = new OpsTempDirectory();
+        string path = temp.File("oc-recycle-readonly.txt", "a");
+        File.SetAttributes(path, FileAttributes.ReadOnly);
+
+        int asked = 0;
+        OperationResult result = FileOperations.Delete(
+            OpsTestHelpers.Entries(path),
+            OpsTestHelpers.Options(o => o.UseRecycleBin = true),
+            onError: (op, p, error) =>
+            {
+                asked++;
+                return DialogResult.Skip;
+            });
+
+        // The recycle path asks the same read-only question the permanent path does; answering
+        // Skip keeps the file out of the bin.
+        Assert.Equal(1, asked);
+        Assert.Equal(1, result.SkippedCount);
+        Assert.True(File.Exists(path));
+
+        File.SetAttributes(path, FileAttributes.Normal);
     }
 
     [Fact]

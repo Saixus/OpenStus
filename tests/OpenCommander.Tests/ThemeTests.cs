@@ -20,8 +20,8 @@ public class ThemeDefaultsTests
         Assert.Equal(Style(ConsoleColor.Yellow, ConsoleColor.DarkBlue), t.PanelColumnTitle); // :84
         Assert.Equal(Style(ConsoleColor.Cyan, ConsoleColor.DarkBlue), t.PanelText);          // :76
         Assert.Equal(Style(ConsoleColor.White, ConsoleColor.DarkBlue), t.PanelDirectory);
-        Assert.Equal(Style(ConsoleColor.DarkGray, ConsoleColor.DarkBlue), t.PanelHidden);
-        Assert.Equal(Style(ConsoleColor.White, ConsoleColor.DarkBlue), t.PanelExecutable);
+        Assert.Equal(Style(ConsoleColor.DarkCyan, ConsoleColor.DarkBlue), t.PanelHidden);   // Highlight: hidden/system
+        Assert.Equal(Style(ConsoleColor.Green, ConsoleColor.DarkBlue), t.PanelExecutable);  // Highlight: *.exe group
         Assert.Equal(Style(ConsoleColor.Magenta, ConsoleColor.DarkBlue), t.PanelArchive);
         Assert.Equal(Style(ConsoleColor.Yellow, ConsoleColor.DarkBlue), t.PanelSelectedFile);   // :77
         Assert.Equal(Style(ConsoleColor.Black, ConsoleColor.DarkCyan), t.PanelCursor);          // :80

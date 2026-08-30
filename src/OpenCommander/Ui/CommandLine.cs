@@ -15,8 +15,12 @@ namespace OpenCommander.Ui;
 /// and the panel share a keyboard: an empty command line means the arrow keys, Home, End, PageUp,
 /// PageDown, Insert and every function key belong to the panel, and the moment there is text on the
 /// line the keys that could plausibly edit it - Left, Right, Home, End, Backspace, Delete - switch
-/// sides. <see cref="HandleKey"/> returns <see langword="false"/> for everything the panel should
-/// see, and the application feeds the panel whatever comes back unhandled.
+/// sides. Up and Down never switch: they keep moving the panel cursor whatever is typed, and the
+/// history is walked with Ctrl+E and Ctrl+X instead. Shifted keys stay out too - Shift plus the
+/// arrows, Home or End is the panel's select-and-move family - so the caret motions only claim a
+/// key when no modifier is held. <see cref="HandleKey"/> returns <see langword="false"/> for
+/// everything the panel should see, and the application feeds the panel whatever comes back
+/// unhandled.
 /// </para>
 /// <para>
 /// The grey keypad keys are the exception that has to be spelled out: Gray+, Gray- and Gray* are the
@@ -60,8 +64,17 @@ public sealed class CommandLine
         History = history;
     }
 
-    /// <summary>The history Up, Down, Ctrl+E and Ctrl+X walk, and that Enter appends to.</summary>
+    /// <summary>
+    /// The history Ctrl+E and Ctrl+X walk - and Up and Down while the panels are hidden - and that
+    /// Enter appends to.
+    /// </summary>
     public CommandHistory History { get; }
+
+    /// <summary>
+    /// The clipboard Shift+Ins and Ctrl+V paste from. Assignable so a test can substitute an
+    /// in-memory implementation and never touch the machine clipboard.
+    /// </summary>
+    public IClipboard Clipboard { get; set; } = Ui.Clipboard.Default;
 
     /// <summary>
     /// The directory shown before the <c>&gt;</c>, which is also the directory Tab completion and
@@ -207,6 +220,10 @@ public sealed class CommandLine
                 case ConsoleKey.X:
                     return RecallNext();
 
+                case ConsoleKey.V:
+                    Paste();
+                    return true;
+
                 case ConsoleKey.LeftArrow when !empty:
                     MoveCaret(PreviousWord(_caret));
                     return true;
@@ -227,9 +244,13 @@ public sealed class CommandLine
             return false; // Alt is quick search and the Alt+F-key commands
         }
 
+        // Only Shift can still be down here - Ctrl and Alt were dealt with above - and a shifted
+        // key is the panel's: Shift+Up/Down and friends are select-and-move, and Shift+Enter is not
+        // Enter. The guards below spell that out; the trailing IsPlainChar case still accepts Shift
+        // so capitals keep typing.
         switch (key.Key)
         {
-            case ConsoleKey.Enter:
+            case ConsoleKey.Enter when key.Mods == KeyMods.None:
                 return Execute(ctx);
 
             case ConsoleKey.Escape:
@@ -273,7 +294,7 @@ public sealed class CommandLine
 
                 return true;
 
-            case ConsoleKey.LeftArrow:
+            case ConsoleKey.LeftArrow when key.Mods == KeyMods.None:
                 if (empty)
                 {
                     return false;
@@ -282,7 +303,7 @@ public sealed class CommandLine
                 MoveCaret(_caret - 1);
                 return true;
 
-            case ConsoleKey.RightArrow:
+            case ConsoleKey.RightArrow when key.Mods == KeyMods.None:
                 if (empty)
                 {
                     return false;
@@ -291,7 +312,7 @@ public sealed class CommandLine
                 MoveCaret(_caret + 1);
                 return true;
 
-            case ConsoleKey.Home:
+            case ConsoleKey.Home when key.Mods == KeyMods.None:
                 if (empty)
                 {
                     return false;
@@ -300,7 +321,7 @@ public sealed class CommandLine
                 MoveCaret(0);
                 return true;
 
-            case ConsoleKey.End:
+            case ConsoleKey.End when key.Mods == KeyMods.None:
                 if (empty)
                 {
                     return false;
@@ -309,13 +330,15 @@ public sealed class CommandLine
                 MoveCaret(_text.Length);
                 return true;
 
-            case ConsoleKey.UpArrow:
-                return !empty && RecallPrevious();
+            // Shift+Ins pastes, as in every Far edit line; the plain key below stays with the panel.
+            case ConsoleKey.Insert when key.Mods == KeyMods.Shift:
+                Paste();
+                return true;
 
-            case ConsoleKey.DownArrow:
-                return !empty && RecallNext();
-
-            // Panel navigation and the function keys are never the command line's business.
+            // Panel navigation and the function keys are never the command line's business. Up and
+            // Down are in that group even with text on the line: in Far they always move the panel
+            // cursor, and the history is recalled with Ctrl+E and Ctrl+X - or through
+            // RecallHistory() while Ctrl+O hides the panels and there is no cursor to move.
             //
             // Gray+, Gray- and Gray* join them: they are select-by-mask, deselect-by-mask and invert
             // selection, and the Windows backend reports them as ConsoleKey.Add/Subtract/Multiply
@@ -324,6 +347,8 @@ public sealed class CommandLine
             // out on purpose: the panel binds nothing to it, and typing a slash into a path has to
             // keep working. The '+' on the main keyboard row arrives as OemPlus, not Add, so it is
             // still inserted as text.
+            case ConsoleKey.UpArrow:
+            case ConsoleKey.DownArrow:
             case ConsoleKey.PageUp:
             case ConsoleKey.PageDown:
             case ConsoleKey.Insert:
@@ -346,6 +371,16 @@ public sealed class CommandLine
 
         return false;
     }
+
+    /// <summary>
+    /// Steps through the history regardless of what is on the line. The shell uses this while the
+    /// panels are hidden (Ctrl+O), when Up and Down have no panel cursor to move - with panels
+    /// showing, Up and Down always belong to the panel and the recall keys are Ctrl+E and Ctrl+X,
+    /// as in Far.
+    /// </summary>
+    /// <param name="previous">Whether to step backwards rather than forwards.</param>
+    /// <returns>Always <see langword="true"/>; the key is consumed either way.</returns>
+    public bool RecallHistory(bool previous) => previous ? RecallPrevious() : RecallNext();
 
     /// <summary>Runs the line, remembers it and clears the field.</summary>
     /// <param name="ctx">The application context, or <see langword="null"/> to only edit the history.</param>
@@ -376,6 +411,22 @@ public sealed class CommandLine
         _caret = Math.Clamp(caret, 0, _text.Length);
         _pendingLine = null;
         return true;
+    }
+
+    /// <summary>
+    /// Inserts the clipboard text at the caret (Shift+Ins and Ctrl+V, as in Far). The command line
+    /// is a single-line field, so everything from the first line break on is dropped.
+    /// </summary>
+    private void Paste()
+    {
+        string? text = Clipboard.GetText();
+        if (string.IsNullOrEmpty(text))
+        {
+            return;
+        }
+
+        int cut = text.IndexOfAny(['\r', '\n']);
+        Insert(cut >= 0 ? text[..cut] : text);
     }
 
     private bool RecallPrevious()

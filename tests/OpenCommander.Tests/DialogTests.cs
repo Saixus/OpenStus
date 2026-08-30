@@ -187,6 +187,26 @@ public class MessageDialogTests
     }
 
     [Fact]
+    public void CancelIsLaidOutLastAndTheAffirmativeButtonIsTheDefault()
+    {
+        // The copy overwrite prompt's button set: Enter must overwrite, never abort the copy.
+        var dialog = new MessageDialog(
+            Fx.Palette(),
+            "File exists",
+            ["Overwrite?"],
+            MessageButtons.Yes | MessageButtons.No | MessageButtons.All
+                | MessageButtons.SkipAll | MessageButtons.Cancel);
+
+        Assert.Equal("&Yes", dialog.Buttons[0].Text);
+        Assert.Equal("&Cancel", dialog.Buttons[^1].Text);
+        Assert.Same(dialog.Buttons[0], dialog.Focused);
+
+        dialog.HandleKey(Fx.Key(ConsoleKey.Enter));
+
+        Assert.Equal(DialogResult.Yes, dialog.Result);
+    }
+
+    [Fact]
     public void AltHotkeyPressesTheButtonWithoutFocusingItFirst()
     {
         var dialog = Confirm();
@@ -216,6 +236,20 @@ public class MessageDialogTests
         dialog.HandleKey(new KeyEvent(ConsoleKey.N, '\0', KeyMods.Alt));
 
         Assert.Equal(DialogResult.No, dialog.Result);
+    }
+
+    [Fact]
+    public void CtrlChordsNeverActivateHotkeys()
+    {
+        var dialog = Confirm();
+
+        // Windows delivers Ctrl+letter as a control character with the letter in the virtual
+        // key - Ctrl+Y in a delete confirmation must not answer Yes.
+        dialog.HandleKey(new KeyEvent(ConsoleKey.Y, '\x19', KeyMods.Ctrl));
+        dialog.HandleKey(new KeyEvent(ConsoleKey.N, '\x0E', KeyMods.Ctrl));
+
+        Assert.False(dialog.IsClosed);
+        Assert.Equal(DialogResult.None, dialog.Result);
     }
 
     [Fact]
@@ -340,6 +374,20 @@ public class DialogFocusTests
 
         Assert.False(dialog.IsClosed);
         Assert.Equal("abco", edit.Text);
+    }
+
+    [Fact]
+    public void TabbingIntoAnEditFieldSelectsItsText()
+    {
+        var dialog = Build(out var ok, out var edit, out _);
+        dialog.SetFocus(ok);
+        Assert.Equal(0, edit.SelectionLength);
+
+        dialog.HandleKey(Fx.Key(ConsoleKey.Tab)); // wraps from the button back to the edit
+
+        Assert.Same(edit, dialog.Focused);
+        Assert.Equal(edit.Text.Length, edit.SelectionLength);
+        Assert.Equal(edit.Text.Length, edit.Caret);
     }
 
     [Fact]
@@ -718,6 +766,20 @@ public class CheckBoxAndRadioTests
     }
 
     [Fact]
+    public void EnterOnAFocusedCheckBoxPressesTheDefaultButtonInstead()
+    {
+        var dialog = new Dialog(Fx.Palette(), "T", 30, 8);
+        var check = dialog.Add(new CheckBoxControl("&Recurse") { Bounds = new Rect(1, 1, 20, 1) });
+        var ok = dialog.Add(new ButtonControl("&Ok", DialogResult.Ok) { Bounds = new Rect(1, 3, 6, 1) });
+        dialog.DefaultButton = ok;
+
+        dialog.HandleKey(Fx.Key(ConsoleKey.Enter));
+
+        Assert.False(check.Checked);
+        Assert.Equal(DialogResult.Ok, dialog.Result);
+    }
+
+    [Fact]
     public void ACheckBoxRespondsToItsHotkey()
     {
         var dialog = new Dialog(Fx.Palette(), "T", 30, 8);
@@ -886,6 +948,20 @@ public class ListControlTests
         Assert.Equal(3, list.TopIndex);
         Assert.InRange(list.SelectedIndex, list.TopIndex, list.TopIndex + 4);
     }
+
+    [Fact]
+    public void TheWheelOverAnEmptyListIsANoOp()
+    {
+        var dialog = new Dialog(Fx.Palette(), "T", 30, 10) { BareHotkeys = false };
+        var list = dialog.Add(new ListControl { Bounds = new Rect(1, 1, 20, 5) });
+        Fx.Render(dialog);
+
+        // Used to throw: the cursor clamp was handed the inverted range (0, -1).
+        dialog.HandleMouse(new MouseEvent(MouseKind.Wheel, 5, 5, MouseButton.None, -3, KeyMods.None));
+
+        Assert.Equal(-1, list.SelectedIndex);
+        Assert.Equal(0, list.TopIndex);
+    }
 }
 
 public class InputDialogTests
@@ -911,11 +987,33 @@ public class InputDialogTests
         var dialog = new InputDialog(Fx.Palette(), "T", "Name", "abc");
         Assert.Same(dialog.Edit, dialog.Focused);
 
+        // The initial text opens selected, so the first character replaces it wholesale.
         Fx.Type(dialog, "d");
         dialog.HandleKey(Fx.Key(ConsoleKey.Enter));
 
         Assert.Equal(DialogResult.Ok, dialog.Result);
-        Assert.Equal("abcd", dialog.AcceptedText);
+        Assert.Equal("d", dialog.AcceptedText);
+    }
+
+    [Fact]
+    public void TheInitialTextOpensSelectedWithTheCaretAtItsEnd()
+    {
+        var dialog = new InputDialog(Fx.Palette(), "Copy", "Copy to:", @"C:\dest");
+
+        Assert.Equal(dialog.Text.Length, dialog.Edit.SelectionLength);
+        Assert.Equal(dialog.Text.Length, dialog.Edit.Caret);
+    }
+
+    [Fact]
+    public void AnUnshiftedMotionKeyCollapsesTheOpeningSelection()
+    {
+        var dialog = new InputDialog(Fx.Palette(), "Copy", "Copy to:", "abc");
+
+        dialog.HandleKey(Fx.Key(ConsoleKey.LeftArrow));
+
+        Assert.Equal(0, dialog.Edit.SelectionLength);
+        Assert.Equal(2, dialog.Edit.Caret);
+        Assert.Equal("abc", dialog.Text);
     }
 
     [Fact]
@@ -1049,9 +1147,23 @@ public class ProgressDialogTests
     {
         var dialog = new ProgressDialog(Fx.Palette(), "Copying");
 
-        dialog.HandleKey(Fx.Key(ConsoleKey.Enter));
+        // Space presses the focused Cancel button; Enter is deliberately dead here.
+        dialog.HandleKey(Fx.Key(ConsoleKey.Spacebar));
 
         Assert.True(dialog.CancelRequested);
+        Assert.False(dialog.IsClosed);
+    }
+
+    [Fact]
+    public void EnterIsIgnoredSoATypeAheadCannotCancel()
+    {
+        var dialog = new ProgressDialog(Fx.Palette(), "Copying");
+
+        // The dialog appears right after the copy prompt was confirmed with Enter: a
+        // double-tapped or type-ahead Enter must not abort the operation just started.
+        dialog.HandleKey(Fx.Key(ConsoleKey.Enter));
+
+        Assert.False(dialog.CancelRequested);
         Assert.False(dialog.IsClosed);
     }
 }
@@ -1364,17 +1476,30 @@ public class MenuBarTests
     }
 
     [Fact]
-    public void EscapeClosesThePullDownThenTheBar()
+    public void EscapeDismissesTheWholeBarEvenWithAPullDownOpen()
     {
         var bar = new MenuBar(Fx.Palette(), Bar());
         Fx.Render(bar);
 
         bar.HandleKey(Fx.Key(ConsoleKey.DownArrow));
+        Assert.True(bar.IsMenuOpen);
+
+        // Far closes the entire menu system on one Esc, not just the pull-down.
         bar.HandleKey(Fx.Key(ConsoleKey.Escape));
+
         Assert.False(bar.IsMenuOpen);
-        Assert.False(bar.IsClosed);
+        Assert.True(bar.IsClosed);
+        Assert.Null(bar.ChosenItem);
+    }
+
+    [Fact]
+    public void EscapeOnTheBareBarClosesItToo()
+    {
+        var bar = new MenuBar(Fx.Palette(), Bar());
+        Fx.Render(bar);
 
         bar.HandleKey(Fx.Key(ConsoleKey.Escape));
+
         Assert.True(bar.IsClosed);
         Assert.Null(bar.ChosenItem);
     }

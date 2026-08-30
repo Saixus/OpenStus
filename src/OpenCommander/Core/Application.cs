@@ -34,6 +34,13 @@ public sealed class Application : IAppContext, IDisposable
     /// <summary>How long the loop sleeps when the input backend had nothing to give.</summary>
     public const int IdleSleepMs = 15;
 
+    /// <summary>
+    /// Columns the clock claims from the panel caption underneath it: the widest time
+    /// (<c>"10:00 AM"</c>, eight columns) plus one of breathing room. A constant on purpose, so the
+    /// caption does not shuffle sideways when the clock's width ticks between seven and eight.
+    /// </summary>
+    public const int ClockTitleReserve = 9;
+
     private const int MaxErrorLines = 8;
 
     private readonly IInputBackend? _input;
@@ -407,6 +414,12 @@ public sealed class Application : IAppContext, IDisposable
             _right.Bounds = new Rect(0, 0, w, panelHeight);
         }
 
+        // The clock owns the top-right corner, so whichever panel reaches it must keep its path
+        // caption clear of those columns.
+        int clockReserve = Settings.ShowClock ? ClockTitleReserve : 0;
+        _left.TitleReserve = rightVisible ? 0 : clockReserve;
+        _right.TitleReserve = clockReserve;
+
         Rect modalArea = ModalArea;
         foreach (ModalFrame frame in _modals)
         {
@@ -496,7 +509,9 @@ public sealed class Application : IAppContext, IDisposable
             }
         }
 
-        if (CommandLineRow >= 0 && !PanelsHidden)
+        // The command line keeps the cursor even while the panels are hidden (Ctrl+O): it is still
+        // live there, exactly as in Far.
+        if (CommandLineRow >= 0)
         {
             Terminal.SetCursor(_commandLine.CaretX, _commandLine.CaretY, true);
             return;
@@ -544,6 +559,9 @@ public sealed class Application : IAppContext, IDisposable
         {
             return;
         }
+
+        // A dialog cannot be drawn on the user screen; anything modal ends the Ctrl+O state.
+        EnsurePanelsScreen();
 
         component.Layout(ModalArea);
 
@@ -614,7 +632,17 @@ public sealed class Application : IAppContext, IDisposable
 
         if (_dirty)
         {
-            RenderNow();
+            // While Ctrl+O shows the user screen a frame must not be flushed - it would scribble
+            // over the console output being shown - so only the prompt line is refreshed.
+            if (UserScreenActive)
+            {
+                EchoUserPrompt();
+                _dirty = false;
+            }
+            else
+            {
+                RenderNow();
+            }
         }
 
         if (!activity && !_quit)
@@ -727,6 +755,18 @@ public sealed class Application : IAppContext, IDisposable
         if (hide != _modifierHide)
         {
             _modifierHide = hide;
+
+            // The held-modifier peek shows the same user screen Ctrl+O does - the untouched
+            // console output, not a blank desktop - and puts the panels back on release.
+            if (hide)
+            {
+                Terminal.ShowUserScreen();
+            }
+            else if (!_panelsHidden)
+            {
+                Terminal.ShowPanelsScreen();
+            }
+
             _dirty = true;
         }
     }
@@ -735,12 +775,45 @@ public sealed class Application : IAppContext, IDisposable
     {
         if (_panelsHidden)
         {
-            _panelsHidden = false; // Ctrl+O showed the desktop; any key brings the panels back
+            // Far keeps the command line live while the panels are off: typing edits the line,
+            // Enter runs it, and Up/Down walk the history even when the line is empty because
+            // there is no panel for them to move. Ctrl+O - through the bindings - and the other
+            // global commands still work; everything else is inert and the panels stay hidden.
+            if (_bindings.TryHandle(key, this) || TryInsertPanelPathChord(key))
+            {
+                return;
+            }
+
+            if (CommandLineRow >= 0)
+            {
+                if (_commandLine.HandleKey(key, this))
+                {
+                    return;
+                }
+
+                if (key.Mods == KeyMods.None && key.Key is ConsoleKey.UpArrow or ConsoleKey.DownArrow)
+                {
+                    _commandLine.RecallHistory(previous: key.Key == ConsoleKey.UpArrow);
+                }
+            }
+
             return;
         }
 
-        if (_bindings.TryHandle(key, this))
+        // While the quick search box is open the panel gets first pick, otherwise the command line
+        // would swallow the plain characters and the search could only continue with Alt held.
+        // The panel is captured up front: a binding such as Ctrl+U swaps the panel objects, and
+        // cancelling through ActiveFilePanel afterwards would close the wrong panel's box.
+        FilePanel? searchPanel = ActiveFilePanel.Search.IsActive ? ActiveFilePanel : null;
+        if (searchPanel is not null && searchPanel.HandleKey(key, this))
         {
+            return;
+        }
+
+        if (_bindings.TryHandle(key, this) || TryInsertPanelPathChord(key))
+        {
+            // A global command ran out from under the search box; Far closes it.
+            searchPanel?.Search.Cancel();
             return;
         }
 
@@ -749,14 +822,54 @@ public sealed class Application : IAppContext, IDisposable
             return;
         }
 
-        ActiveFilePanel.HandleKey(key, this);
+        if (searchPanel is null)
+        {
+            ActiveFilePanel.HandleKey(key, this);
+        }
+    }
+
+    /// <summary>
+    /// The character half of the Ctrl+[ / Ctrl+] chords. The binding table catches the US layout's
+    /// Oem4/Oem6 virtual keys; a layout with the brackets elsewhere delivers only the literal - or
+    /// the control character the console cooks the chord into - so both are accepted here,
+    /// mirroring the panel's Ctrl+\ handling.
+    /// </summary>
+    /// <param name="key">The key press.</param>
+    /// <returns><see langword="true"/> when a panel path was inserted.</returns>
+    private bool TryInsertPanelPathChord(KeyEvent key)
+    {
+        if (key.Mods != KeyMods.Ctrl)
+        {
+            return false;
+        }
+
+        if (key.Ch is '[' or '\u001b')
+        {
+            InsertPanelPath(left: true);
+            return true;
+        }
+
+        if (key.Ch is ']' or '\u001d')
+        {
+            InsertPanelPath(left: false);
+            return true;
+        }
+
+        return false;
     }
 
     private void HandleGlobalMouse(MouseEvent mouse)
     {
+        // Hidden panels first: on the user screen the key bar is not drawn, so a click anywhere -
+        // the bottom row included - must bring the panels back rather than fire an invisible
+        // function key.
         if (_panelsHidden)
         {
-            _panelsHidden = false;
+            if (mouse.IsPress)
+            {
+                SetPanelsHidden(false);
+            }
+
             return;
         }
 
@@ -844,11 +957,31 @@ public sealed class Application : IAppContext, IDisposable
 
         _history.Add(command);
 
-        int code = CommandExecutor.Run(command, ActiveFilePanel.CurrentPath, Terminal, out string? changeDirectory);
+        // With the panels hidden (Ctrl+O) the command runs on the visible user screen and the
+        // shell stays there afterwards, like Far; the echoed prompt line gets a newline first so
+        // the child's output starts under it rather than on it.
+        bool stayOnUserScreen = UserScreenActive;
+        if (stayOnUserScreen)
+        {
+            Terminal.WriteUserScreen("\r\n");
+        }
+
+        int code = CommandExecutor.Run(
+            command,
+            ActiveFilePanel.CurrentPath,
+            Terminal,
+            out string? changeDirectory,
+            resumeAltScreen: !stayOnUserScreen);
 
         if (!string.IsNullOrEmpty(changeDirectory) && FileSystemProvider.DirectoryExists(changeDirectory))
         {
             ActiveFilePanel.Navigate(changeDirectory);
+        }
+        else if (code == CommandExecutor.DirectoryChanged && !string.IsNullOrEmpty(changeDirectory))
+        {
+            // An internal cd whose target is not there must say so, like Far - a silent no-op reads
+            // as the key having done nothing.
+            _ui.Error("Change folder", "The folder does not exist: " + Shorten(changeDirectory, 60));
         }
         else if (code != CommandExecutor.DirectoryChanged)
         {
@@ -856,6 +989,16 @@ public sealed class Application : IAppContext, IDisposable
         }
 
         SyncWorkingDirectory();
+
+        if (stayOnUserScreen && UserScreenActive)
+        {
+            // Still on the user screen - an error dialog above may have dismissed it - so put a
+            // fresh prompt under the command's output.
+            EchoUserPrompt();
+            _dirty = false;
+            return;
+        }
+
         Terminal.Invalidate();
         _dirty = true;
     }
@@ -919,10 +1062,11 @@ public sealed class Application : IAppContext, IDisposable
             return;
         }
 
+        // TryOpen has already shown its own detailed error box when it answers null, so a second
+        // generic dialog here would be both redundant and wrong.
         FileViewer? viewer = FileViewer.TryOpen(Theme, Ui, entry.FullPath);
         if (viewer is null)
         {
-            _ui.Error("View", "Cannot open " + entry.FullPath);
             return;
         }
 
@@ -947,10 +1091,11 @@ public sealed class Application : IAppContext, IDisposable
             return;
         }
 
+        // As with F3: a null from TryOpen means the editor already told the user why, or the user
+        // themselves said no to opening a binary file.
         FileEditor? editor = FileEditor.TryOpen(Theme, Ui, entry.FullPath, _editorClipboard);
         if (editor is null)
         {
-            _ui.Error("Edit", "Cannot open " + entry.FullPath);
             return;
         }
 
@@ -958,7 +1103,10 @@ public sealed class Application : IAppContext, IDisposable
         RefreshBothPanels();
     }
 
-    /// <summary>Asks for a name and opens the editor on a new file (Shift+F4).</summary>
+    /// <summary>
+    /// Asks for a file name and opens the editor on it (Shift+F4). An existing name opens the file
+    /// itself, exactly as in Far; only a genuinely new name starts an empty document.
+    /// </summary>
     public void EditNewFile()
     {
         FilePanel panel = ActiveFilePanel;
@@ -970,8 +1118,15 @@ public sealed class Application : IAppContext, IDisposable
         }
 
         string full = ResolvePath(panel.CurrentPath, name);
-        var buffer = new TextBuffer { FilePath = full };
-        var editor = new FileEditor(Theme, Ui, buffer, _editorClipboard);
+
+        // TryOpen loads whatever is on disk and only falls back to an empty document with the
+        // path set when nothing is there yet. Constructing the empty buffer here instead would
+        // hand F2 a blank document that silently truncates a real file whose name was re-typed.
+        FileEditor? editor = FileEditor.TryOpen(Theme, Ui, full, _editorClipboard);
+        if (editor is null)
+        {
+            return; // the editor has already reported why it would not open
+        }
 
         RunModal(editor);
         RefreshBothPanels();
@@ -1047,12 +1202,16 @@ public sealed class Application : IAppContext, IDisposable
         _dirty = true;
     }
 
-    /// <summary>Deletes the tagged items, or the one under the cursor (F8 / Shift+F8).</summary>
-    /// <param name="permanent">When set, the recycle bin is bypassed.</param>
-    public void DeleteFiles(bool permanent)
+    /// <summary>Deletes the tagged items, or only the one under the cursor (F8, Del / Shift+F8).</summary>
+    /// <param name="permanent">When set, the recycle bin is bypassed (Shift+Del).</param>
+    /// <param name="currentOnly">
+    /// When set, the selection is ignored and only the item under the cursor is deleted - Far's
+    /// Shift+F8, which unlike Shift+Del still honours the recycle bin setting.
+    /// </param>
+    public void DeleteFiles(bool permanent, bool currentOnly = false)
     {
         FilePanel panel = ActiveFilePanel;
-        IReadOnlyList<FileEntry> sources = SourcesFor(panel, currentOnly: false);
+        IReadOnlyList<FileEntry> sources = SourcesFor(panel, currentOnly);
 
         if (sources.Count == 0)
         {
@@ -1074,6 +1233,29 @@ public sealed class Application : IAppContext, IDisposable
                 : ["Delete " + what, "permanently?"];
 
             if (!_ui.Confirm("Delete", lines, warning: true))
+            {
+                return;
+            }
+        }
+
+        // Far asks a second time, in red, before a folder with content goes: the confirmation
+        // above is about the count, this one is about the recursion. One dialog covers the whole
+        // batch - Far's per-folder All/Skip loop needs per-entry answers the operation engine
+        // does not take yet. Far keeps this question behind its own confirmation switch,
+        // independent of the general one, and so does this.
+        List<FileEntry> nonEmpty = Settings.ConfirmDeleteNonEmptyFolders
+            ? [.. sources.Where(IsNonEmptyDirectory)]
+            : [];
+        if (nonEmpty.Count > 0)
+        {
+            string what = nonEmpty.Count == 1
+                ? "The folder \"" + nonEmpty[0].Name + "\" is not empty."
+                : string.Create(CultureInfo.InvariantCulture, $"{nonEmpty.Count} of the folders are not empty.");
+            string question = nonEmpty.Count == 1
+                ? "Do you still wish to delete it?"
+                : "Do you still wish to delete them?";
+
+            if (!_ui.Confirm("Delete folder", [what, question], warning: true))
             {
                 return;
             }
@@ -1166,8 +1348,11 @@ public sealed class Application : IAppContext, IDisposable
             string label = drive.Label.Length > 0 ? drive.Label : drive.FileSystem;
             string caption = "&" + drive.Letter + "  " + Escape(label);
 
+            // Far's drive menu shows both the capacity and what is left of it.
             string right = drive.IsReady
-                ? $"{drive.Type}  {SizeFormatter.Short(drive.FreeBytes)} free"
+                ? string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{SizeFormatter.Short(drive.TotalBytes),8} total  {SizeFormatter.Short(drive.FreeBytes),8} free")
                 : drive.Type.ToString();
 
             items.Add(new MenuItem(caption, right));
@@ -1331,6 +1516,10 @@ public sealed class Application : IAppContext, IDisposable
     /// <summary>Measures the tagged folders, or the one under the cursor (Ctrl+L).</summary>
     public void ShowDirectorySize()
     {
+        // The progress frame below is pushed by hand rather than through RunModal, so the Ctrl+O
+        // user screen has to be dismissed here before anything renders over it.
+        EnsurePanelsScreen();
+
         FilePanel panel = ActiveFilePanel;
         List<FileEntry> targets = [.. panel.SelectedOrCurrent.Where(static e => !e.IsParent)];
 
@@ -1478,6 +1667,18 @@ public sealed class Application : IAppContext, IDisposable
         InsertIntoCommandLine(text.Contains(' ', StringComparison.Ordinal) ? "\"" + text + "\"" : text);
     }
 
+    /// <summary>
+    /// Puts a panel's folder path on the command line (Ctrl+[ for the left panel, Ctrl+] for the
+    /// right), quoted when it contains a space and followed by one, ready for the next argument.
+    /// </summary>
+    /// <param name="left">Whether the left panel's path is wanted.</param>
+    public void InsertPanelPath(bool left)
+    {
+        string path = (left ? _left : _right).CurrentPath;
+        InsertIntoCommandLine(
+            (path.Contains(' ', StringComparison.Ordinal) ? "\"" + path + "\"" : path) + " ");
+    }
+
     /// <summary>Hides or shows one panel (Ctrl+F1 / Ctrl+F2).</summary>
     /// <param name="left">Whether to toggle the left panel.</param>
     public void TogglePanel(bool left)
@@ -1504,11 +1705,86 @@ public sealed class Application : IAppContext, IDisposable
     /// <summary>Hides or shows the panel without the focus (Ctrl+P).</summary>
     public void TogglePassivePanel() => TogglePanel(left: !_leftActive);
 
-    /// <summary>Hides both panels until the next key press (Ctrl+O).</summary>
-    public void HidePanelsTemporarily()
+    /// <summary>
+    /// Hides both panels, or shows them again (Ctrl+O). Hiding reveals the user screen - the
+    /// primary console buffer with the output of every command run so far, which is the whole
+    /// point of the key in Far - and the command line stays live on it: typing edits it, Enter
+    /// runs it, Up and Down walk the history. Only Ctrl+O, a mouse click, or something modal
+    /// opening brings the panels back.
+    /// </summary>
+    public void HidePanelsTemporarily() => SetPanelsHidden(!_panelsHidden);
+
+    /// <summary>
+    /// Applies the Ctrl+O state: flips the flag, switches between the alternate buffer and the
+    /// user screen, and echoes the prompt line onto the user screen when hiding.
+    /// </summary>
+    /// <param name="hidden">Whether the panels should be hidden.</param>
+    private void SetPanelsHidden(bool hidden)
     {
-        _panelsHidden = true;
+        _panelsHidden = hidden;
+
+        if (hidden)
+        {
+            Terminal.ShowUserScreen();
+            EchoUserPrompt();
+        }
+        else if (!_modifierHide)
+        {
+            Terminal.ShowPanelsScreen();
+        }
+
         _dirty = true;
+    }
+
+    /// <summary>
+    /// Puts the panels screen back before anything modal is pumped: a dialog cannot be drawn over
+    /// the user screen without destroying the very output Ctrl+O is showing, so - unlike Far,
+    /// which owns the console buffer cell by cell - opening one ends the hidden state.
+    /// </summary>
+    private void EnsurePanelsScreen()
+    {
+        if (_panelsHidden)
+        {
+            SetPanelsHidden(false);
+        }
+        else if (!Terminal.OnAlternateScreen && !Terminal.IsHeadless)
+        {
+            Terminal.ShowPanelsScreen();
+            _dirty = true;
+        }
+    }
+
+    /// <summary>
+    /// <see langword="true"/> while the user screen is showing, when nothing may be rendered: a
+    /// frame written now would scribble over the console output being shown.
+    /// </summary>
+    private bool UserScreenActive => PanelsHidden && !Terminal.OnAlternateScreen && !Terminal.IsHeadless;
+
+    /// <summary>
+    /// Redraws the prompt line at the bottom of the user screen: carriage return, clear the line,
+    /// the active panel's path, the <c>&gt;</c> and the typed text, with the terminal's own cursor
+    /// walked back to the caret. Raw VT, deliberately outside the cell buffer.
+    /// </summary>
+    private void EchoUserPrompt()
+    {
+        // No echo during the held-modifier peek, and none when the command line is switched off in
+        // the settings - the hidden-state key handler ignores typing then, so a painted prompt
+        // would look live while being dead.
+        if (!UserScreenActive || (_modifierHide && !_panelsHidden) || CommandLineRow < 0)
+        {
+            return;
+        }
+
+        string text = _commandLine.Text;
+        string line = "\r\u001b[K" + ActiveFilePanel.CurrentPath + CommandLine.PromptSuffix + text;
+
+        int back = text.Length - _commandLine.Caret;
+        if (back > 0)
+        {
+            line += "\u001b[" + back.ToString(CultureInfo.InvariantCulture) + "D";
+        }
+
+        Terminal.WriteUserScreen(line);
     }
 
     /// <summary>Shows or hides the function key bar (Ctrl+B).</summary>
@@ -1648,6 +1924,10 @@ public sealed class Application : IAppContext, IDisposable
         string title,
         Func<OperationProgress, Action, OverwritePrompt, ErrorPrompt, OperationResult> run)
     {
+        // The progress frame is pushed by hand rather than through RunModal, so the Ctrl+O user
+        // screen has to be dismissed here before PumpBackground renders over it.
+        EnsurePanelsScreen();
+
         var progress = new OperationProgress { Title = title };
         var dialog = new ProgressDialog(Theme, title, showSecondary: true);
         dialog.Layout(ModalArea);
@@ -1687,18 +1967,32 @@ public sealed class Application : IAppContext, IDisposable
 
     private DialogResult AskOverwrite(FileEntry source, FileInfo target, ref string newName)
     {
-        _ = newName;
+        _ = newName; // the Rename answer would fill this in; the dialog does not offer it yet
 
+        // Far's dialog shows the two files' size and stamp side by side, because that pair is the
+        // question the user is actually weighing: which copy is newer, and which is bigger.
         return _ui.Message(
             "Warning",
             [
                 "The destination file already exists:",
                 Shorten(target?.FullName ?? string.Empty, 60),
                 "Overwrite it with \"" + (source?.Name ?? string.Empty) + "\"?",
+                string.Empty,
+                "New:      " + FileStamp(source?.Size ?? 0, source?.Modified ?? default),
+                "Existing: " + FileStamp(target?.Length ?? 0, target?.LastWriteTime ?? default),
             ],
             MessageButtons.Yes | MessageButtons.No | MessageButtons.All | MessageButtons.SkipAll | MessageButtons.Cancel,
             warning: true);
     }
+
+    /// <summary>
+    /// One overwrite-dialog line: the exact grouped byte count and the modification stamp, in the
+    /// panel's own date and time format.
+    /// </summary>
+    private static string FileStamp(long size, DateTime modified) =>
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"{SizeFormatter.Commas(size)} bytes  {modified:MM/dd/yy HH:mm}");
 
     private DialogResult AskError(string operation, string path, Exception error) =>
         _ui.Message(
@@ -1734,8 +2028,10 @@ public sealed class Application : IAppContext, IDisposable
 
         if (Settings.ClearSelectionAfterOperation && !result.Cancelled)
         {
-            _left.ClearSelection();
-            _right.ClearSelection();
+            // Far untags the source panel only; the passive panel's selection is its own and
+            // survives the operation. (Far is finer-grained still - skipped and failed items keep
+            // their tags - but that needs per-entry answers the operation engine does not report.)
+            ActiveFilePanel.ClearSelection();
         }
 
         RefreshBothPanels();
@@ -1757,6 +2053,10 @@ public sealed class Application : IAppContext, IDisposable
 
     private void SetActivePanel(FilePanel panel)
     {
+        // A half-typed quick search must not survive the focus moving to the other panel.
+        _left.Search.Cancel();
+        _right.Search.Cancel();
+
         _leftActive = ReferenceEquals(panel, _left);
         _left.IsActive = _leftActive;
         _right.IsActive = !_leftActive;
@@ -1776,6 +2076,31 @@ public sealed class Application : IAppContext, IDisposable
 
         FileEntry? current = panel.Current;
         return current is null || current.IsParent ? [] : [current];
+    }
+
+    /// <summary>Whether an entry is a folder with anything at all inside it.</summary>
+    /// <remarks>
+    /// A reparse point answers no, because deleting one removes the link, not what it points at.
+    /// So does an unreadable folder: the extra confirmation is skipped and the delete itself
+    /// surfaces the access error, which is the more truthful message of the two.
+    /// </remarks>
+    private static bool IsNonEmptyDirectory(FileEntry entry)
+    {
+        if (!entry.IsDirectory || entry.IsParent || entry.IsReparsePoint)
+        {
+            return false;
+        }
+
+        try
+        {
+            using IEnumerator<string> children =
+                Directory.EnumerateFileSystemEntries(entry.FullPath).GetEnumerator();
+            return children.MoveNext();
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return false;
+        }
     }
 
     private static string DescribeComponent(IScreenComponent component) => component switch

@@ -21,7 +21,8 @@ namespace OpenCommander.Ui;
 /// Key handling order is: the <see cref="OnKey"/> hook (so a subclass can veto anything), then the
 /// focused control, then Tab/Shift+Tab, Enter, Esc, and finally the Alt+hotkey and bare-hotkey
 /// lookups. Because the focused control gets the key first, an edit field naturally swallows plain
-/// characters and hotkeys stop firing while the caret is in it.
+/// characters and hotkeys stop firing while the caret is in it. A Ctrl chord is never a hotkey -
+/// Far dialogs only react to the plain letter or Alt+letter.
 /// </para>
 /// </remarks>
 public class Dialog : IScreenComponent
@@ -175,7 +176,13 @@ public class Dialog : IScreenComponent
             return false;
         }
 
+        var previous = _focused;
         _focused = control;
+        if (!ReferenceEquals(previous, control))
+        {
+            control.OnFocusEntered();
+        }
+
         return true;
     }
 
@@ -344,8 +351,9 @@ public class Dialog : IScreenComponent
             return true;
         }
 
-        char? hot = HotkeyOf(key);
-        if (hot is char c)
+        // Ctrl chords are never dialog hotkeys. Far reacts to the plain letter and to
+        // Alt+letter only, so Ctrl+Y must not answer Yes to a delete confirmation.
+        if ((key.Mods & KeyMods.Ctrl) == 0 && HotkeyOf(key) is char c)
         {
             bool alt = (key.Mods & KeyMods.Alt) != 0;
             if ((alt || BareHotkeys) && TryHotkey(c))
@@ -463,7 +471,14 @@ public class Dialog : IScreenComponent
             return char.ToLowerInvariant(key.Ch);
         }
 
-        // Windows reports Alt+letter with no character attached; recover it from the virtual key.
+        // Windows reports Alt+letter with no character attached; recover it from the virtual
+        // key - but only under Alt. A Ctrl chord also arrives as a control character with the
+        // letter in the virtual key, and that letter must never be read as a hotkey press.
+        if ((key.Mods & KeyMods.Alt) == 0)
+        {
+            return null;
+        }
+
         if (key.Key >= ConsoleKey.A && key.Key <= ConsoleKey.Z)
         {
             return (char)('a' + (key.Key - ConsoleKey.A));
@@ -503,7 +518,13 @@ public class Dialog : IScreenComponent
             int index = ((start + (step * i)) % _controls.Count + _controls.Count) % _controls.Count;
             if (_controls[index].CanFocus)
             {
+                var previous = _focused;
                 _focused = _controls[index];
+                if (!ReferenceEquals(previous, _focused))
+                {
+                    _focused.OnFocusEntered();
+                }
+
                 return;
             }
         }

@@ -43,8 +43,11 @@ public readonly record struct TextLine(string Text, string Ending)
 /// </remarks>
 public sealed class TextBuffer
 {
-    /// <summary>The tab stop width used when none is configured.</summary>
-    public const int DefaultTabSize = 4;
+    /// <summary>
+    /// The tab stop width used when none is configured. Eight, matching Far's editor default and
+    /// the viewer, so F3 and F4 show a tabbed file with the same indentation.
+    /// </summary>
+    public const int DefaultTabSize = 8;
 
     /// <summary>How many undo records are kept before the oldest are dropped.</summary>
     public const int DefaultUndoLimit = 1000;
@@ -821,7 +824,10 @@ public sealed class TextBuffer
     /// <summary>Finds text in the document.</summary>
     /// <param name="needle">The text to find; empty never matches.</param>
     /// <param name="fromLine">The line to start from.</param>
-    /// <param name="fromColumn">The column to start from.</param>
+    /// <param name="fromColumn">
+    /// The column to start from. Searching forwards, a match may start at this column; searching
+    /// backwards, a match must start before it (though it may extend past it).
+    /// </param>
     /// <param name="ignoreCase">Compare case insensitively.</param>
     /// <param name="backwards">Search towards the start of the document.</param>
     /// <param name="line">Receives the line of the match.</param>
@@ -877,7 +883,12 @@ public sealed class TextBuffer
                 continue;
             }
 
-            int at = text[..limit].LastIndexOf(needle, comparison);
+            // Only the match's START has to sit before the column; the match itself may extend
+            // past it. Truncating the haystack at the column would demand the whole match fit
+            // before it, missing straddlers - so instead extend the searched slice far enough
+            // that a hit beginning at limit-1 can still run its full length.
+            int end = Math.Min(text.Length, limit + needle.Length - 1);
+            int at = text.AsSpan(0, end).LastIndexOf(needle, comparison);
             if (at >= 0)
             {
                 line = i;

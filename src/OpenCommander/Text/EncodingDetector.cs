@@ -41,12 +41,16 @@ public static class EncodingDetector
 
     /// <summary>
     /// The single byte encoding used for files that are not valid UTF-8: the operating system ANSI
-    /// code page on Windows when the host has registered a provider for it, otherwise Latin-1.
+    /// code page on Windows - which is what Far decodes legacy files with - or Latin-1 when that
+    /// page is unavailable or not single byte.
     /// </summary>
     /// <remarks>
-    /// Latin-1 is the safe fallback rather than a mere approximation of Windows-1252: it maps all
-    /// 256 byte values to distinct characters and back, so an unrecognised file still round-trips
-    /// byte for byte through a load, an edit and a save. On Unix the fallback is UTF-8.
+    /// The legacy pages are served by the <see cref="CodePagesEncodingProvider"/> that the program
+    /// registers on startup. Whatever is chosen must map all 256 byte values to distinct
+    /// characters and back, so an unrecognised file still round-trips byte for byte through a
+    /// load, an edit and a save - which is why a double byte ANSI page (the CJK ones) is refused
+    /// in favour of Latin-1 until per-file code page switching exists. On Unix the fallback is
+    /// UTF-8.
     /// </remarks>
     public static Encoding AnsiFallback { get; } = ResolveAnsiFallback();
 
@@ -377,11 +381,17 @@ public static class EncodingDetector
         {
             int cp = NativeMethods.AnsiCodePage();
 
-            // Only accept a code page the runtime can actually service. A stock .NET build has no
-            // provider for the legacy pages, so this normally throws and we land on Latin-1.
+            // The legacy pages come from the CodePagesEncodingProvider registered at startup (see
+            // Program). Only a single byte page is accepted: the CJK ANSI pages are double byte,
+            // and decoding an arbitrary unrecognised file with one of those would not round-trip
+            // byte for byte on save.
             if (cp > 0 && cp != 65001)
             {
-                return Encoding.GetEncoding(cp);
+                Encoding ansi = Encoding.GetEncoding(cp);
+                if (ansi.IsSingleByte)
+                {
+                    return ansi;
+                }
             }
         }
         catch (Exception e) when (e is ArgumentException or NotSupportedException or PlatformNotSupportedException or EntryPointNotFoundException or DllNotFoundException)

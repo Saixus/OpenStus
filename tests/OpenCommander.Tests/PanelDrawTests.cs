@@ -141,38 +141,42 @@ internal static class PanelFixture
 public class PanelDrawTests
 {
     [Fact]
-    public void FrameIsASingleLineBoxWithATeeSeparatorAboveTheStatusLine()
+    public void FrameIsADoubleLineBoxWithASingleLineSeparatorAboveTheStatusLine()
     {
         string[] lines = PanelFixture.Render(PanelFixture.Panel());
 
         Assert.Equal(PanelFixture.Height, lines.Length);
 
-        // Top frame.
-        Assert.Equal('┌', lines[0][0]);
-        Assert.Equal('┐', lines[0][39]);
+        // Far's outer frame is double.
+        Assert.Equal('╔', lines[0][0]);
+        Assert.Equal('╗', lines[0][39]);
 
         // Column titles and file rows carry the vertical frame.
         for (int y = 1; y <= 16; y++)
         {
-            Assert.Equal('│', lines[y][0]);
-            Assert.Equal('│', lines[y][39]);
+            Assert.Equal('║', lines[y][0]);
+            Assert.Equal('║', lines[y][39]);
         }
 
-        // The separator above the status line, then the bottom frame.
-        Assert.Equal('├', lines[17][0]);
-        Assert.Equal('┤', lines[17][39]);
+        // The separator above the status line is single and meets the double edges with ╟ and ╢,
+        // then the bottom frame closes double again.
+        Assert.Equal('╟', lines[17][0]);
+        Assert.Equal('╢', lines[17][39]);
         Assert.Equal(new string('─', 38), lines[17][1..39]);
-        Assert.Equal('└', lines[19][0]);
-        Assert.Equal('┘', lines[19][39]);
+        Assert.Equal('╚', lines[19][0]);
+        Assert.Equal('╝', lines[19][39]);
     }
 
     [Fact]
-    public void TheStatusLineHasNoSideFrameCharacters()
+    public void TheStatusRowCarriesTheDoubleFrameVerticals()
     {
         string[] lines = PanelFixture.Render(PanelFixture.Panel());
 
+        // Far keeps the ║ edges running through the status row down to the bottom corners; only
+        // the ╟──╢ separator above it is single.
+        Assert.Equal('║', lines[18][0]);
+        Assert.Equal('║', lines[18][39]);
         Assert.DoesNotContain("│", lines[18], StringComparison.Ordinal);
-        Assert.NotEqual('│', lines[18][0]);
     }
 
     [Fact]
@@ -185,7 +189,7 @@ public class PanelDrawTests
 
         int expectedStart = (PanelFixture.Width - title.Length) / 2;
         Assert.Equal(expectedStart, lines[0].IndexOf(title, StringComparison.Ordinal));
-        Assert.Equal('─', lines[0][expectedStart - 1]);
+        Assert.Equal('═', lines[0][expectedStart - 1]);
     }
 
     [Fact]
@@ -208,8 +212,9 @@ public class PanelDrawTests
     {
         string[] lines = PanelFixture.Render(PanelFixture.Panel());
 
-        // "Name" centred in a 19 cell stripe, then in an 18 cell one.
-        Assert.Equal("│       Name        │       Name       │", lines[1]);
+        // "Name" centred in a 19 cell stripe, then in an 18 cell one; the top-left header cell
+        // carries the sort letter, "n" for an ascending sort by name.
+        Assert.Equal("║n      Name        │       Name       ║", lines[1]);
     }
 
     [Fact]
@@ -217,9 +222,9 @@ public class PanelDrawTests
     {
         string[] lines = PanelFixture.Render(PanelFixture.Panel());
 
-        Assert.Equal("│ ..                │                  │", lines[2]);
-        Assert.Equal("│ Documents         │                  │", lines[3]);
-        Assert.Equal("│ Projects          │                  │", lines[4]);
+        Assert.Equal("║ ..                │                  ║", lines[2]);
+        Assert.Equal("║ Documents         │                  ║", lines[3]);
+        Assert.Equal("║ Projects          │                  ║", lines[4]);
     }
 
     [Fact]
@@ -230,8 +235,8 @@ public class PanelDrawTests
 
         string[] lines = PanelFixture.Render(panel);
 
-        Assert.StartsWith(" notes.txt", lines[18], StringComparison.Ordinal);
-        Assert.EndsWith("1 234  08/08/26  14:30", lines[18], StringComparison.Ordinal);
+        Assert.StartsWith("║ notes.txt", lines[18], StringComparison.Ordinal);
+        Assert.EndsWith("1 234  08/08/26  14:30║", lines[18], StringComparison.Ordinal);
     }
 
     [Fact]
@@ -240,33 +245,35 @@ public class PanelDrawTests
         var panel = PanelFixture.Panel();
 
         panel.CursorIndex = 0;
-        Assert.EndsWith("Up  08/08/26  14:30", PanelFixture.Render(panel)[18], StringComparison.Ordinal);
+        Assert.EndsWith("Up  08/08/26  14:30║", PanelFixture.Render(panel)[18], StringComparison.Ordinal);
 
         panel.CursorIndex = 1;
-        Assert.EndsWith("Folder  08/08/26  14:30", PanelFixture.Render(panel)[18], StringComparison.Ordinal);
+        Assert.EndsWith("Folder  08/08/26  14:30║", PanelFixture.Render(panel)[18], StringComparison.Ordinal);
     }
 
     [Fact]
-    public void TheStatusLineRightBlockEndsOnThePanelsLastColumn()
+    public void TheStatusLineRightBlockEndsOnTheSecondToLastColumn()
     {
         var panel = PanelFixture.Panel();
         panel.CursorIndex = 4; // notes.txt
 
         PanelFixture.Render(panel, out ScreenBuffer buffer);
 
+        // The final digit of "14:30" sits flush against the right ║, which keeps the frame column
+        // for itself.
         const int Row = 18;
+        Assert.Equal('0', buffer.Get(PanelFixture.Width - 2, Row).Ch);
+        Assert.Equal('║', buffer.Get(PanelFixture.Width - 1, Row).Ch);
         Assert.Equal(
-            PanelFixture.Width - 1,
-            PanelFixture.LastNonSpace(buffer, Row, 0, PanelFixture.Width));
-
-        // The very last cell is the final digit of "14:30", not the blank the inset used to leave.
-        Assert.Equal('0', buffer.Get(PanelFixture.Width - 1, Row).Ch);
+            PanelFixture.Width - 2,
+            PanelFixture.LastNonSpace(buffer, Row, 1, PanelFixture.Width - 2));
     }
 
     [Fact]
     public void TheStatusLineIsRightAlignedForAPanelThatDoesNotStartAtColumnZero()
     {
-        // The right panel of a split screen: the block has to hug column 32, not the screen edge.
+        // The right panel of a split screen: the block has to hug the frame at column 32, not the
+        // screen edge.
         var panel = PanelFixture.Panel();
         panel.Bounds = new Rect(3, 0, 30, PanelFixture.Height);
         panel.CursorIndex = 4;
@@ -274,8 +281,9 @@ public class PanelDrawTests
         var buffer = new ScreenBuffer(PanelFixture.Width, PanelFixture.Height);
         panel.Draw(buffer);
 
-        Assert.Equal(32, PanelFixture.LastNonSpace(buffer, 18, 3, 30));
-        Assert.Equal('0', buffer.Get(32, 18).Ch);
+        Assert.Equal(31, PanelFixture.LastNonSpace(buffer, 18, 4, 28));
+        Assert.Equal('0', buffer.Get(31, 18).Ch);
+        Assert.Equal('║', buffer.Get(32, 18).Ch);
     }
 
     [Fact]
@@ -286,8 +294,10 @@ public class PanelDrawTests
 
         PanelFixture.Render(panel, out ScreenBuffer buffer);
 
-        Assert.Equal(' ', buffer.Get(0, 18).Ch);
-        Assert.Equal('n', buffer.Get(1, 18).Ch);
+        // The frame first, then the same one space of padding the file rows give their names.
+        Assert.Equal('║', buffer.Get(0, 18).Ch);
+        Assert.Equal(' ', buffer.Get(1, 18).Ch);
+        Assert.Equal('n', buffer.Get(2, 18).Ch);
     }
 
     [Fact]
@@ -304,13 +314,11 @@ public class PanelDrawTests
 
         for (int i = 0; i < entries.Length; i++)
         {
-            // The status line shows the bare token, the Size column the same token in brackets and
-            // with no padding inside them, so the two readings can never drift apart.
+            // Both the status line and the Size column show the same bare word - no angle
+            // brackets, exactly as Far draws it - so the two readings can never drift apart.
             string status = FilePanel.StatusRightText(entries[i]);
             Assert.StartsWith(expected[i] + "  ", status, StringComparison.Ordinal);
-            Assert.Equal(
-                "<" + expected[i] + ">",
-                FilePanel.CellText(entries[i], PanelColumnKind.Size));
+            Assert.Equal(expected[i], FilePanel.CellText(entries[i], PanelColumnKind.Size));
         }
     }
 
@@ -323,9 +331,9 @@ public class PanelDrawTests
         PanelFixture.Render(panel, out ScreenBuffer buffer);
 
         // The Size column is cells 15..23 of a 40 wide panel; every row's marker or count ends on 23.
-        Assert.Equal(23, PanelFixture.LastNonSpace(buffer, 2, 15, PanelColumn.SizeWidth)); // "<Up>"
-        Assert.Equal(23, PanelFixture.LastNonSpace(buffer, 3, 15, PanelColumn.SizeWidth)); // "<Folder>"
-        Assert.Equal(23, PanelFixture.LastNonSpace(buffer, 6, 15, PanelColumn.SizeWidth)); // "1 234"
+        Assert.Equal(23, PanelFixture.LastNonSpace(buffer, 2, 15, PanelColumn.SizeWidth)); // "Up"
+        Assert.Equal(23, PanelFixture.LastNonSpace(buffer, 3, 15, PanelColumn.SizeWidth)); // "Folder"
+        Assert.Equal(23, PanelFixture.LastNonSpace(buffer, 6, 15, PanelColumn.SizeWidth)); // "1234"
     }
 
     [Fact]
@@ -366,10 +374,10 @@ public class PanelDrawTests
         // between the corners, so it loses its tail rather than overwriting the frame.
         string[] lines = PanelFixture.Render(panel);
 
-        Assert.Equal('└', lines[19][0]);
-        Assert.Equal('┘', lines[19][39]);
+        Assert.Equal('╚', lines[19][0]);
+        Assert.Equal('╝', lines[19][39]);
         Assert.Equal(ScreenBuffer.Ellipsis, lines[19][38]);
-        Assert.StartsWith("└ Selected: 2.0 K, files: 1, folders: ", lines[19], StringComparison.Ordinal);
+        Assert.StartsWith("╚ Selected: 2.0 K, files: 1, folders: ", lines[19], StringComparison.Ordinal);
     }
 
     [Fact]
@@ -380,7 +388,7 @@ public class PanelDrawTests
         string[] lines = PanelFixture.Render(panel);
 
         Assert.Contains(" Bytes: 0 B, files: 0, folders: 0 ", lines[19]);
-        Assert.Equal("│                   │                  │", lines[2]);
+        Assert.Equal("║                   │                  ║", lines[2]);
     }
 
     [Fact]
@@ -403,10 +411,10 @@ public class PanelDrawTests
 
         string[] lines = PanelFixture.Render(panel);
 
-        Assert.Equal("│    Name     │  Size   │  Date  │Time │", lines[1]);
-        Assert.Equal("│ ..          │     <Up>│08/08/26│14:30│", lines[2]);
-        Assert.Equal("│ Documents   │ <Folder>│08/08/26│14:30│", lines[3]);
-        Assert.Equal("│ notes.txt   │    1 234│08/08/26│14:30│", lines[6]);
+        Assert.Equal("║n   Name     │  Size   │  Date  │Time ║", lines[1]);
+        Assert.Equal("║ ..          │       Up│08/08/26│14:30║", lines[2]);
+        Assert.Equal("║ Documents   │   Folder│08/08/26│14:30║", lines[3]);
+        Assert.Equal("║ notes.txt   │     1234│08/08/26│14:30║", lines[6]);
     }
 
     [Fact]
@@ -417,10 +425,10 @@ public class PanelDrawTests
 
         string[] lines = PanelFixture.Render(panel);
 
-        Assert.EndsWith("Attr │", lines[1]);
-        Assert.EndsWith("----D│", lines[3]);   // Documents
-        Assert.EndsWith("-A---│", lines[6]);   // notes.txt
-        Assert.EndsWith("-A-H-│", lines[8]);   // hidden.dat
+        Assert.EndsWith("Attr ║", lines[1]);
+        Assert.EndsWith("----D║", lines[3]);   // Documents
+        Assert.EndsWith("-A---║", lines[6]);   // notes.txt
+        Assert.EndsWith("-A-H-║", lines[8]);   // hidden.dat
     }
 
     [Fact]
@@ -432,7 +440,10 @@ public class PanelDrawTests
         string[] lines = PanelFixture.Render(panel);
 
         Assert.Equal(3, lines[1].Split("Name").Length - 1);
-        Assert.Equal(4, lines[1].Count(c => c == '│'));
+
+        // Two single-line dividers between the three stripes; the outer edges are double.
+        Assert.Equal(2, lines[1].Count(c => c == '│'));
+        Assert.Equal(2, lines[1].Count(c => c == '║'));
     }
 
     [Fact]
@@ -443,8 +454,8 @@ public class PanelDrawTests
 
         string[] lines = PanelFixture.Render(panel);
 
-        Assert.StartsWith("│ file000.txt", lines[2], StringComparison.Ordinal);
-        Assert.StartsWith("│ file014.txt", lines[16], StringComparison.Ordinal);
+        Assert.StartsWith("║ file000.txt", lines[2], StringComparison.Ordinal);
+        Assert.StartsWith("║ file014.txt", lines[16], StringComparison.Ordinal);
         Assert.Contains("file015.txt", lines[2]);
         Assert.Contains("file019.txt", lines[6]);
     }
@@ -454,7 +465,7 @@ public class PanelDrawTests
     {
         var small = PanelFixture.Panel();
         PanelFixture.Render(small, out ScreenBuffer buffer);
-        Assert.Equal('│', buffer.Get(39, 2).Ch);
+        Assert.Equal('║', buffer.Get(39, 2).Ch);
 
         var big = PanelFixture.Panel(PanelFixture.ManyFiles(100));
         PanelFixture.Render(big, out buffer);
@@ -579,7 +590,10 @@ public class PanelColourTests
 
         Assert.Equal(Palette.PanelColumnTitle, buffer.Get(8, 1).Style);
         Assert.Equal(Palette.PanelTotals, buffer.Get(PanelFixture.Width / 2, 19).Style);
-        Assert.Equal(Palette.PanelStatus, buffer.Get(0, 18).Style);
+
+        // The status row: the frame keeps its edge cell, the inner fill is the status colour.
+        Assert.Equal(Palette.PanelBoxActive, buffer.Get(0, 18).Style);
+        Assert.Equal(Palette.PanelStatus, buffer.Get(19, 18).Style);
     }
 
     [Fact]
@@ -1168,18 +1182,21 @@ public class PanelQuickSearchTests
     }
 
     [Fact]
-    public void TheSearchExpiresAfterThreeIdleSeconds()
+    public void EscapeClosesTheSearchAndEnterOnlyClosesIt()
     {
-        var search = new QuickSearch();
-        var start = new DateTime(2026, 8, 8, 12, 0, 0, DateTimeKind.Utc);
+        var panel = PanelFixture.Panel();
 
-        search.Append('a', start);
-        Assert.False(search.ExpireIfIdle(start.AddSeconds(2)));
-        Assert.True(search.IsActive);
+        panel.HandleKey(PanelFixture.Key(ConsoleKey.N, KeyMods.Alt, 'n'), null!);
+        Assert.True(panel.Search.IsActive);
 
-        Assert.True(search.ExpireIfIdle(start + QuickSearch.Timeout));
-        Assert.False(search.IsActive);
-        Assert.Equal(string.Empty, search.Text);
+        // Far keeps the box open however long the user thinks: there is no idle timeout, and Enter
+        // closes the box without activating the entry under the cursor.
+        Assert.True(panel.HandleKey(PanelFixture.Key(ConsoleKey.Enter, KeyMods.None, '\r'), null!));
+        Assert.False(panel.Search.IsActive);
+
+        panel.HandleKey(PanelFixture.Key(ConsoleKey.N, KeyMods.Alt, 'n'), null!);
+        panel.HandleKey(PanelFixture.Key(ConsoleKey.Escape), null!);
+        Assert.False(panel.Search.IsActive);
     }
 }
 

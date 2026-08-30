@@ -102,11 +102,11 @@ public class ScreenshotTests
         string frame = Frame(app);
         string[] rows = frame.Split('\n');
 
-        Assert.Equal(2, rows[0].Count(c => c == '\u250c')); // two top-left corners
-        Assert.Equal(2, rows[0].Count(c => c == '\u2510')); // two top-right corners
+        Assert.Equal(2, rows[0].Count(c => c == '\u2554')); // two double top-left corners
+        Assert.Equal(2, rows[0].Count(c => c == '\u2557')); // two double top-right corners
 
         // The right panel starts exactly at the half-way column.
-        Assert.Equal('\u250c', app.Terminal.Buffer.Get(Width / 2, 0).Glyph);
+        Assert.Equal('\u2554', app.Terminal.Buffer.Get(Width / 2, 0).Glyph);
         Assert.Equal(new Rect(0, 0, Width / 2, Height - 2), app.LeftFilePanel.Bounds);
         Assert.Equal(new Rect(Width / 2, 0, Width / 2, Height - 2), app.RightFilePanel.Bounds);
     }
@@ -255,7 +255,7 @@ public class ScreenshotTests
     }
 
     [Fact]
-    public void CtrlOHidesThePanelsAndTheNextKeyBringsThemBack()
+    public void CtrlOTogglesThePanelsAndTypingStaysOnTheCommandLine()
     {
         using var tree = new ShellTree("ctrlo");
         using Application app = Build(tree.Root, tree.Root);
@@ -266,9 +266,61 @@ public class ScreenshotTests
         string frame = Frame(app);
         Assert.DoesNotContain("readme.md", frame, StringComparison.Ordinal);
 
-        app.ProcessInput(InputEvent.FromKey(new KeyEvent(ConsoleKey.Spacebar, ' ', KeyMods.None)));
+        // Far keeps the command line live while the panels are off: typing lands there and the
+        // panels stay hidden.
+        app.ProcessInput(InputEvent.FromKey(new KeyEvent(ConsoleKey.D, 'd', KeyMods.None)));
+        Assert.True(app.PanelsHidden);
+        Assert.Equal("d", app.CommandLineWidget.Text);
+        Assert.DoesNotContain("readme.md", Frame(app), StringComparison.Ordinal);
+
+        // Only Ctrl+O brings them back.
+        app.ProcessInput(InputEvent.FromKey(new KeyEvent(ConsoleKey.O, 'o', KeyMods.Ctrl)));
         Assert.False(app.PanelsHidden);
         Assert.Contains("readme.md", Frame(app), StringComparison.Ordinal);
+        Assert.Equal("d", app.CommandLineWidget.Text);
+    }
+
+    /// <summary>
+    /// While the panels are hidden the key bar is not on screen, so a click on the bottom row must
+    /// restore the panels - not fire the function key whose invisible cell it landed in.
+    /// </summary>
+    [Fact]
+    public void AClickWhilePanelsAreHiddenRestoresThemInsteadOfPressingTheInvisibleKeyBar()
+    {
+        using var tree = new ShellTree("ctrlo-mouse");
+        using Application app = Build(tree.Root, tree.Root);
+
+        app.ProcessInput(InputEvent.FromKey(new KeyEvent(ConsoleKey.O, 'o', KeyMods.Ctrl)));
+        Assert.True(app.PanelsHidden);
+        Assert.True(app.KeyBarRow >= 0);
+
+        app.ProcessInput(InputEvent.FromMouse(
+            new MouseEvent(MouseKind.Down, 5, app.KeyBarRow, MouseButton.Left, 0, KeyMods.None)));
+
+        Assert.False(app.QuitRequested);
+        Assert.False(app.PanelsHidden);
+    }
+
+    [Fact]
+    public void CtrlEnterInsertsTheNameQuotedWhenItNeedsToBe()
+    {
+        using var tree = new ShellTree("ctrlenter");
+        File.WriteAllText(Path.Combine(tree.Root, "my file.txt"), "x");
+        using Application app = Build(tree.Root, tree.Root);
+
+        // A name with a space arrives quoted - the same rule as Ctrl+J, whose synonym the help
+        // screen documents Ctrl+Enter to be - and Far's trailing space comes with it.
+        FilePanel panel = app.LeftFilePanel;
+        panel.CursorIndex = panel.Entries.ToList().FindIndex(e => e.Name == "my file.txt");
+        app.ProcessInput(InputEvent.FromKey(new KeyEvent(ConsoleKey.Enter, '\r', KeyMods.Ctrl)));
+
+        Assert.Equal("\"my file.txt\" ", app.CommandLineWidget.Text);
+
+        // A plain name goes in bare, so repeated presses build up an argument list.
+        panel.CursorIndex = panel.Entries.ToList().FindIndex(e => e.Name == "readme.md");
+        app.ProcessInput(InputEvent.FromKey(new KeyEvent(ConsoleKey.Enter, '\r', KeyMods.Ctrl)));
+
+        Assert.Equal("\"my file.txt\" readme.md ", app.CommandLineWidget.Text);
     }
 
     [Fact]

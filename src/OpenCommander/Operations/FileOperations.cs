@@ -496,6 +496,21 @@ public static class FileOperations
             return;
         }
 
+        if (isLink && !ctx.Options.FollowLinks)
+        {
+            // A link travels as a link: recreated at the destination with its stored target copied
+            // verbatim (so a relative target re-resolves against the new parent, as an OS-level
+            // move would leave it), never flattened into a plain empty folder that merely looks
+            // like one. On a move the source link only goes once its replacement actually exists -
+            // a failed recreation must not cost the user the link they still have.
+            if (RecreateDirectoryLink(source, target, ctx) && ctx.IsMove && !ctx.IsCancelled)
+            {
+                RemoveEmptySourceDirectory(source, ctx, isLink: true);
+            }
+
+            return;
+        }
+
         if (!EnsureDirectory(target, ctx))
         {
             return;
@@ -506,40 +521,37 @@ public static class FileOperations
             ctx.Result.DirectoriesProcessed++;
         }
 
-        if (!isLink || ctx.Options.FollowLinks)
+        List<FileSystemInfo>? children = ReadChildren(source, ctx);
+        if (children is null)
         {
-            List<FileSystemInfo>? children = ReadChildren(source, ctx);
-            if (children is null)
+            return;
+        }
+
+        foreach (FileSystemInfo child in children)
+        {
+            if (ctx.IsCancelled)
             {
                 return;
             }
 
-            foreach (FileSystemInfo child in children)
+            bool childIsDirectory;
+            try
             {
-                if (ctx.IsCancelled)
-                {
-                    return;
-                }
+                childIsDirectory = (child.Attributes & FileAttributes.Directory) != 0;
+            }
+            catch (Exception e) when (IsFileSystemException(e))
+            {
+                continue;
+            }
 
-                bool childIsDirectory;
-                try
-                {
-                    childIsDirectory = (child.Attributes & FileAttributes.Directory) != 0;
-                }
-                catch (Exception e) when (IsFileSystemException(e))
-                {
-                    continue;
-                }
-
-                string childTarget = Path.Combine(target, child.Name);
-                if (childIsDirectory)
-                {
-                    TransferDirectory(child.FullName, childTarget, ctx);
-                }
-                else
-                {
-                    TransferFile(child.FullName, childTarget, ctx);
-                }
+            string childTarget = Path.Combine(target, child.Name);
+            if (childIsDirectory)
+            {
+                TransferDirectory(child.FullName, childTarget, ctx);
+            }
+            else
+            {
+                TransferFile(child.FullName, childTarget, ctx);
             }
         }
 
@@ -549,7 +561,66 @@ public static class FileOperations
 
         if (ctx.IsMove && !ctx.IsCancelled)
         {
-            RemoveEmptySourceDirectory(source, ctx, isLink && !ctx.Options.FollowLinks);
+            RemoveEmptySourceDirectory(source, ctx, isLink: false);
+        }
+    }
+
+    /// <summary>
+    /// Recreates the directory link at <paramref name="source"/> as a new link at
+    /// <paramref name="target"/> carrying the same stored target - which for a relative target
+    /// means it re-resolves against the new parent, exactly as an OS-level move leaves it.
+    /// </summary>
+    /// <remarks>
+    /// Creating a symbolic link takes a privilege plain Windows users often lack, and a junction's
+    /// reparse data is not always readable - so this can genuinely fail, and when it does the
+    /// failure goes through the error prompt like any other. No metadata pass afterwards: a link's
+    /// own stamps are cosmetic, and setting them risks writing through to the target instead.
+    /// </remarks>
+    /// <returns>Whether the link now exists at the destination.</returns>
+    private static bool RecreateDirectoryLink(string source, string target, Context ctx)
+    {
+        string? parent = Path.GetDirectoryName(target);
+        if (!string.IsNullOrEmpty(parent) && !Directory.Exists(parent) && !EnsureDirectory(parent, ctx))
+        {
+            return false;
+        }
+
+        while (true)
+        {
+            if (ctx.IsCancelled)
+            {
+                return false;
+            }
+
+            try
+            {
+                string? linkTarget = new DirectoryInfo(source).LinkTarget;
+                if (linkTarget is null)
+                {
+                    throw new IOException($"The link target of \"{Path.GetFileName(source)}\" could not be read");
+                }
+
+                Directory.CreateSymbolicLink(target, linkTarget);
+                ctx.Result.DirectoriesProcessed++;
+                ctx.Report();
+                return true;
+            }
+            catch (Exception e) when (IsFileSystemException(e))
+            {
+                switch (ctx.HandleError(ctx.Name, source, e))
+                {
+                    case ErrorAction.Retry:
+                        continue;
+
+                    case ErrorAction.Skip:
+                        ctx.Result.SkippedCount++;
+                        return false;
+
+                    default:
+                        ctx.Cancel();
+                        return false;
+                }
+            }
         }
     }
 
@@ -736,6 +807,11 @@ public static class FileOperations
         OperationResult result = ctx.Result;
         OperationProgress progress = ctx.Progress;
 
+        // Where the existing content ends. A failed append is cut back to this length, because a
+        // retry would otherwise land the whole source after this attempt's partial tail. Measured
+        // once, before the first attempt, so a failed cut cannot shift the mark.
+        long appendBase = append ? SafeLength(target) : 0;
+
         while (true)
         {
             if (ctx.IsCancelled)
@@ -764,13 +840,13 @@ public static class FileOperations
             }
             catch (OperationCanceledException)
             {
-                RollBack(target, targetExisted, append, ctx);
+                RollBack(target, targetExisted, append, appendBase, ctx);
                 ctx.Cancel();
                 return false;
             }
             catch (Exception e) when (IsFileSystemException(e))
             {
-                RollBack(target, targetExisted, append, ctx);
+                RollBack(target, targetExisted, append, appendBase, ctx);
 
                 switch (ctx.HandleError(ctx.Name, source, e))
                 {
@@ -826,7 +902,7 @@ public static class FileOperations
         }
     }
 
-    private static void RollBack(string target, bool targetExisted, bool append, Context ctx)
+    private static void RollBack(string target, bool targetExisted, bool append, long appendBase, Context ctx)
     {
         // Un-charge whatever this attempt wrote, so a retry does not count the same bytes twice.
         long written = ctx.Progress.CurrentFileDone;
@@ -837,10 +913,32 @@ public static class FileOperations
             ctx.Progress.CurrentFileDone = 0;
         }
 
-        if (targetExisted || append)
+        if (append)
         {
-            // The original is already gone, or we were adding to a file the user asked us to keep;
-            // deleting it now would destroy more than we created.
+            // The file holds content the user asked us to keep plus this attempt's partial tail.
+            // Cutting back to the original length keeps the first and drops the second, so a retry
+            // appends after the real content and not after the leftovers.
+            try
+            {
+                using var stream = new FileStream(target, FileMode.Open, FileAccess.Write, FileShare.None);
+                if (stream.Length > appendBase)
+                {
+                    stream.SetLength(appendBase);
+                }
+            }
+            catch (Exception e) when (IsFileSystemException(e))
+            {
+                // A tail we cannot cut off is a file we cannot reopen either; the retry's own open
+                // will report the same failure properly.
+            }
+
+            return;
+        }
+
+        if (targetExisted)
+        {
+            // The original is already gone; deleting the partial replacement now would destroy
+            // more than we created.
             return;
         }
 
@@ -1019,6 +1117,24 @@ public static class FileOperations
 
     private static void RecycleOne(string path, bool isDirectory, Context ctx)
     {
+        // The recycle path never reaches DeleteOneFile, so the read-only question has to be asked
+        // here too - a recycled file is just as gone from the panel as a deleted one. Files only,
+        // matching the permanent path: on Windows the ReadOnly attribute on a directory is routine
+        // decoration (desktop.ini customisation, sync folders) and never blocks the delete.
+        if (!isDirectory && IsReadOnly(path))
+        {
+            switch (ctx.ConfirmReadOnly(path))
+            {
+                case ErrorAction.Skip:
+                    ctx.Result.SkippedCount++;
+                    return;
+
+                case ErrorAction.Cancel:
+                    ctx.Cancel();
+                    return;
+            }
+        }
+
         while (true)
         {
             if (ctx.IsCancelled)
@@ -1533,6 +1649,18 @@ public static class FileOperations
         try
         {
             return (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0;
+        }
+        catch (Exception e) when (IsFileSystemException(e))
+        {
+            return false;
+        }
+    }
+
+    private static bool IsReadOnly(string path)
+    {
+        try
+        {
+            return (File.GetAttributes(path) & FileAttributes.ReadOnly) != 0;
         }
         catch (Exception e) when (IsFileSystemException(e))
         {

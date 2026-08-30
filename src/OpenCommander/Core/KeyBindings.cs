@@ -158,7 +158,7 @@ public sealed class KeyBindings
         t.Add(KeyMods.Shift, ConsoleKey.F6, "Rename the item under the cursor", a => a.MoveFiles(currentOnly: true));
         t.Add(KeyMods.None, ConsoleKey.F7, "Create a folder", a => a.MakeDirectory());
         t.Add(KeyMods.None, ConsoleKey.F8, "Delete", a => a.DeleteFiles(permanent: false));
-        t.Add(KeyMods.Shift, ConsoleKey.F8, "Delete permanently, bypassing the recycle bin", a => a.DeleteFiles(permanent: true));
+        t.Add(KeyMods.Shift, ConsoleKey.F8, "Delete the item under the cursor", a => a.DeleteFiles(permanent: false, currentOnly: true));
         t.Add(KeyMods.None, ConsoleKey.F9, "Open the horizontal menu", a => a.ShowMainMenu());
         t.Add(KeyMods.Shift, ConsoleKey.F9, "Save the settings", a => a.SaveSettings());
         t.Add(KeyMods.None, ConsoleKey.F10, "Quit", a => a.QuitCommand());
@@ -170,7 +170,7 @@ public sealed class KeyBindings
 
         // --- Delete, only while the command line is empty --------------------
         t.Add(KeyMods.None, ConsoleKey.Delete, "Delete", a => a.DeleteFiles(permanent: false), CommandLineEmpty);
-        t.Add(KeyMods.Shift, ConsoleKey.Delete, "Delete permanently", a => a.DeleteFiles(permanent: true), CommandLineEmpty);
+        t.Add(KeyMods.Shift, ConsoleKey.Delete, "Delete permanently, bypassing the recycle bin", a => a.DeleteFiles(permanent: true), CommandLineEmpty);
 
         // --- Alt chords ------------------------------------------------------
         t.Add(KeyMods.Alt, ConsoleKey.F1, "Change the left panel's drive", a => a.ShowDriveMenu(left: true));
@@ -194,7 +194,7 @@ public sealed class KeyBindings
         // --- panel visibility -------------------------------------------------
         t.Add(KeyMods.Ctrl, ConsoleKey.F1, "Hide or show the left panel", a => a.TogglePanel(left: true));
         t.Add(KeyMods.Ctrl, ConsoleKey.F2, "Hide or show the right panel", a => a.TogglePanel(left: false));
-        t.Add(KeyMods.Ctrl, ConsoleKey.O, "Hide both panels until the next key", a => a.HidePanelsTemporarily());
+        t.Add(KeyMods.Ctrl, ConsoleKey.O, "Hide or show both panels; the command line stays live", a => a.HidePanelsTemporarily());
         t.Add(KeyMods.Ctrl, ConsoleKey.P, "Hide or show the passive panel", a => a.TogglePassivePanel());
         t.Add(KeyMods.Ctrl, ConsoleKey.U, "Swap the two panels", a => a.SwapPanels());
         t.Add(KeyMods.Ctrl, ConsoleKey.B, "Show or hide the key bar", a => a.ToggleKeyBar());
@@ -214,6 +214,13 @@ public sealed class KeyBindings
             a => a.CopyNamesToClipboard(fullPaths: true));
         t.Add(KeyMods.Ctrl, ConsoleKey.J, "Insert the name under the cursor", a => a.InsertName(fullPath: false));
         t.Add(KeyMods.Ctrl, ConsoleKey.F, "Insert the full name under the cursor", a => a.InsertName(fullPath: true));
+
+        // Ctrl+[ and Ctrl+] are the bracket keys, which the console reports as Oem4 and Oem6 on
+        // the US layout. A layout with the brackets elsewhere delivers a different virtual key, so
+        // Application.HandleGlobalKey also accepts the chord by its character - the same
+        // arrangement FilePanel uses for Ctrl+\.
+        t.Add(KeyMods.Ctrl, ConsoleKey.Oem4, "Insert the left panel's folder path", a => a.InsertPanelPath(left: true));
+        t.Add(KeyMods.Ctrl, ConsoleKey.Oem6, "Insert the right panel's folder path", a => a.InsertPanelPath(left: false));
 
         return t;
     }

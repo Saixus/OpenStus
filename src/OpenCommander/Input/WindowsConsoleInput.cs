@@ -224,6 +224,15 @@ public sealed class WindowsConsoleInput : IInputBackend
 
         int vk = k.wVirtualKeyCode;
 
+        // Alt+numpad character entry (Alt+0233 for 'é', Alt+130): Windows delivers the composed
+        // character in the VK_MENU key-UP record's UnicodeChar - the only record that ever
+        // carries it - so it must be caught before the modifier filter below throws it away.
+        if (IsAltNumpadComposition(vk, k.bKeyDown != 0, (char)k.UnicodeChar))
+        {
+            _queue.Enqueue(InputEvent.FromKey(new KeyEvent(ConsoleKey.None, (char)k.UnicodeChar, KeyMods.None)));
+            return;
+        }
+
         // Modifier and lock keys only move CurrentModifiers; they are never delivered as key presses.
         if (vk is ConsoleNative.VK_SHIFT or ConsoleNative.VK_CONTROL or ConsoleNative.VK_MENU
               or ConsoleNative.VK_CAPITAL or ConsoleNative.VK_NUMLOCK or ConsoleNative.VK_SCROLL
@@ -399,6 +408,22 @@ public sealed class WindowsConsoleInput : IInputBackend
 
         return mods;
     }
+
+    /// <summary>
+    /// Recognises the record that finishes an Alt+numpad character composition.
+    /// </summary>
+    /// <param name="virtualKey">The <c>wVirtualKeyCode</c> from the key record.</param>
+    /// <param name="keyDown">Whether the record is a key press rather than a release.</param>
+    /// <param name="ch">The <c>UnicodeChar</c> from the key record.</param>
+    /// <returns><see langword="true"/> for an Alt key-up record carrying a composed character.</returns>
+    /// <remarks>
+    /// Windows reports the character entered with Alt+numpad in the <c>VK_MENU</c> key-up record's
+    /// <c>UnicodeChar</c> field and nowhere else; <see cref="Console.ReadKey(bool)"/> special-cases
+    /// exactly this record for the same reason. An ordinary Alt release carries no character and
+    /// stays a pure modifier change.
+    /// </remarks>
+    public static bool IsAltNumpadComposition(int virtualKey, bool keyDown, char ch) =>
+        virtualKey == ConsoleNative.VK_MENU && !keyDown && ch != '\0';
 
     /// <summary>
     /// Maps a Win32 virtual key code to a <see cref="ConsoleKey"/>.

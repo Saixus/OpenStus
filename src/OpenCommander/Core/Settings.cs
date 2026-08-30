@@ -110,6 +110,12 @@ public sealed class Settings
     /// <summary>Ask before deleting.</summary>
     public bool ConfirmDelete { get; set; } = true;
 
+    /// <summary>
+    /// Ask a second time before deleting a folder that has content - Far keeps this question
+    /// separate from the general delete confirmation, and so does this flag.
+    /// </summary>
+    public bool ConfirmDeleteNonEmptyFolders { get; set; } = true;
+
     /// <summary>Ask before overwriting an existing destination file.</summary>
     public bool ConfirmOverwrite { get; set; } = true;
 

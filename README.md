@@ -23,32 +23,32 @@ oc --screenshot --size 120x28 --clock 10:06 --left . --right ./src/OpenCommander
 ```
 
 ```
-┌───────────── C:\Work\!Lab\Git\OpenCommander ─────────────┐┌─ …rk\!Lab\Git\OpenCommander\src\OpenCommander\Rend10:06 AM
-│            Name             │            Name            ││            Name             │            Name            │
-│ ..                          │                            ││ ..                          │                            │
-│ .git                        │                            ││ BoxChars.cs                 │                            │
-│ .github                     │                            ││ Cell.cs                     │                            │
-│ .vs                         │                            ││ CellStyle.cs                │                            │
-│ src                         │                            ││ ColorDepth.cs               │                            │
-│ tests                       │                            ││ Palette.cs                  │                            │
-│ .editorconfig               │                            ││ Rect.cs                     │                            │
-│ .gitignore                  │                            ││ ScreenBuffer.cs             │                            │
-│ CHANGELOG.md                │                            ││ Terminal.cs                 │                            │
-│ CONTRIBUTING.md             │                            ││                             │                            │
-│ Directory.Build.props       │                            ││                             │                            │
-│ LICENSE                     │                            ││                             │                            │
-│ OpenCommander.sln           │                            ││                             │                            │
-│ README.md                   │                            ││                             │                            │
-│                             │                            ││                             │                            │
-│                             │                            ││                             │                            │
-│                             │                            ││                             │                            │
-│                             │                            ││                             │                            │
-│                             │                            ││                             │                            │
-│                             │                            ││                             │                            │
-│                             │                            ││                             │                            │
-├──────────────────────────────────────────────────────────┤├──────────────────────────────────────────────────────────┤
- ..                                      Up  08/08/26  10:04 ..                                      Up  08/08/26  14:06
-└────────── Bytes: 44.7 K, files: 8, folders: 5 ───────────┘└────────── Bytes: 77.6 K, files: 8, folders: 0 ───────────┘
+╔═════════════ C:\Work\!Lab\Git\OpenCommander ═════════════╗╔═══ …it\OpenCommander\src\OpenCommander\Rendering ═10:06 AM
+║n           Name             │            Name            ║║n           Name             │            Name            ║
+║ ..                          │                            ║║ ..                          │                            ║
+║ .git                        │                            ║║ BoxChars.cs                 │                            ║
+║ .github                     │                            ║║ Cell.cs                     │                            ║
+║ .vs                         │                            ║║ CellStyle.cs                │                            ║
+║ src                         │                            ║║ ColorDepth.cs               │                            ║
+║ tests                       │                            ║║ Palette.cs                  │                            ║
+║ .editorconfig               │                            ║║ Rect.cs                     │                            ║
+║ .gitignore                  │                            ║║ ScreenBuffer.cs             │                            ║
+║ CHANGELOG.md                │                            ║║ Terminal.cs                 │                            ║
+║ CONTRIBUTING.md             │                            ║║                             │                            ║
+║ Directory.Build.props       │                            ║║                             │                            ║
+║ LICENSE                     │                            ║║                             │                            ║
+║ OpenCommander.sln           │                            ║║                             │                            ║
+║ README.md                   │                            ║║                             │                            ║
+║                             │                            ║║                             │                            ║
+║                             │                            ║║                             │                            ║
+║                             │                            ║║                             │                            ║
+║                             │                            ║║                             │                            ║
+║                             │                            ║║                             │                            ║
+║                             │                            ║║                             │                            ║
+║                             │                            ║║                             │                            ║
+╟──────────────────────────────────────────────────────────╢╟──────────────────────────────────────────────────────────╢
+║ ..                                    Up  08/28/26  19:21║║ ..                                    Up  08/30/26  21:38║
+╚══════════ Bytes: 47.8 K, files: 8, folders: 5 ═══════════╝╚══════════ Bytes: 82.8 K, files: 8, folders: 0 ═══════════╝
 C:\Work\!Lab\Git\OpenCommander>
 1Help    2UserMn    3View    4Edit    5Copy    6RenMov    7MkFold    8Delete   9ConfMn   10Quit   11Plugin   12Screen
 ```
@@ -335,7 +335,7 @@ generated from `HelpScreen.Bindings`, so they cannot drift apart.
 | `Shift+F4` | Create and edit a new file |
 | `Shift+F5` | Copy the item under the cursor into this folder |
 | `Shift+F6` | Rename the item under the cursor |
-| `Shift+F8` | Delete permanently, bypassing the recycle bin |
+| `Shift+F8` | Delete only the item under the cursor |
 | `Shift+Del` | Delete permanently, bypassing the recycle bin |
 | `Shift+F9` | Save the settings |
 | `Ctrl+L` | Folder size of the tagged items |
@@ -382,17 +382,12 @@ generated from `HelpScreen.Bindings`, so they cannot drift apart.
 | `Enter` | Run the command |
 | `Esc` | Clear the line |
 | `Ctrl+Y` | Clear the line |
-| `Up / Down` | Walk the command history |
 | `Ctrl+E / Ctrl+X` | Walk the command history |
 | `Tab` | Complete the path under the caret |
 | `Ctrl+Left / Ctrl+Right` | Move one word |
 | `Ctrl+Enter / Ctrl+J` | Insert the name under the cursor |
 | `Ctrl+F` | Insert the full name under the cursor |
 | `cd <path>` | Change the active panel's folder |
-
-Hold <kbd>Shift</kbd>, <kbd>Ctrl</kbd> or <kbd>Alt</kbd> and the key bar captions change under your
-fingers, exactly as they do in Far — the Windows input backend reports modifier presses on their own,
-so the bar is live rather than guessed.
 
 ## Settings, themes and the user menu
 

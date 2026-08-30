@@ -41,8 +41,9 @@ public sealed class OperationOptions
     public bool ConfirmOverwrite { get; set; } = true;
 
     /// <summary>
-    /// Ask through the error prompt before permanently deleting a file carrying the ReadOnly
-    /// attribute. Answering Retry, Yes, Ok or All deletes it anyway.
+    /// Ask through the error prompt before deleting a file carrying the ReadOnly attribute, whether
+    /// the delete is permanent or goes to the recycle bin. Answering Retry, Yes, Ok or All deletes
+    /// it anyway.
     /// </summary>
     public bool ConfirmReadOnlyDelete { get; set; } = true;
 
@@ -67,7 +68,9 @@ public sealed class OperationOptions
 
     /// <summary>
     /// Recurse into directories that are reparse points (symlinks, junctions, volume mounts). Off by
-    /// default: a link is recreated as an empty directory at the target rather than risking a cycle.
+    /// default: the link itself is recreated at the target, pointing at the same place, rather than
+    /// risking a cycle - and a link that cannot be recreated is reported, never silently replaced by
+    /// an empty plain folder.
     /// </summary>
     public bool FollowLinks { get; set; }
 

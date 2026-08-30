@@ -8,7 +8,7 @@ public enum PanelColumnKind
     /// <summary>The entry name. The only elastic column: it absorbs whatever width is left over.</summary>
     Name,
 
-    /// <summary>The size in bytes, or <c>&lt;Folder&gt;</c> / <c>&lt;  Up  &gt;</c> for a directory.</summary>
+    /// <summary>The size in bytes, or <c>Folder</c> / <c>Up</c> / <c>Symlink</c> for a directory.</summary>
     Size,
 
     /// <summary>The last write date, <c>MM/dd/yy</c>.</summary>
@@ -43,7 +43,7 @@ public enum PanelColumnKind
 /// <param name="Width">The column's width in cells.</param>
 public readonly record struct PanelColumn(PanelColumnKind Kind, int Stripe, int X, int Width)
 {
-    /// <summary>Width of a size column: enough for <c>"&lt;Symlink&gt;"</c> and for a grouped six digit byte count.</summary>
+    /// <summary>Width of a size column: enough for <c>"Symlink"</c> and for a nine digit byte count.</summary>
     public const int SizeWidth = 9;
 
     /// <summary>Width of a date column: exactly <c>"MM/dd/yy"</c>.</summary>

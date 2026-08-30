@@ -8,10 +8,9 @@ namespace OpenCommander.Panels;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The search is shown as a small box drawn over the panel's bottom frame and stays open until the
-/// user presses Escape or Enter, moves the cursor with an arrow key, deletes the last character, or
-/// simply stops typing for <see cref="Timeout"/>. The timeout is checked lazily, against a caller
-/// supplied clock, so nothing here needs a timer and the whole class is deterministic under test.
+/// The search is shown as a small box drawn over the panel's bottom frame and stays open - exactly
+/// like Far - until the user presses Escape or Enter, moves the cursor with an arrow key, or
+/// deletes the last character. There is no inactivity timeout.
 /// </para>
 /// <para>
 /// Matching runs in two passes over the listing: first every name that <em>starts</em> with the typed
@@ -23,9 +22,6 @@ namespace OpenCommander.Panels;
 /// </remarks>
 public sealed class QuickSearch
 {
-    /// <summary>How long the box stays open after the last keystroke.</summary>
-    public static readonly TimeSpan Timeout = TimeSpan.FromSeconds(3);
-
     private string _text = string.Empty;
     private DateTime _lastInput;
 
@@ -81,22 +77,6 @@ public sealed class QuickSearch
     {
         IsActive = false;
         _text = string.Empty;
-    }
-
-    /// <summary>
-    /// Closes the box when nothing has been typed for <see cref="Timeout"/>.
-    /// </summary>
-    /// <param name="now">The current time.</param>
-    /// <returns><see langword="true"/> when this call closed the box.</returns>
-    public bool ExpireIfIdle(DateTime now)
-    {
-        if (!IsActive || now - _lastInput < Timeout)
-        {
-            return false;
-        }
-
-        Cancel();
-        return true;
     }
 
     /// <summary>

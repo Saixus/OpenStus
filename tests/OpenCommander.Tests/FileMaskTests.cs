@@ -159,6 +159,60 @@ public class FileMaskListTests
     }
 
     [Fact]
+    public void FarStyleExcludesFollowAPipe()
+    {
+        Assert.True(FileMask.IsMatchAny("Program.cs", "*.cs|*.g.cs", ignoreCase: true));
+        Assert.False(FileMask.IsMatchAny("Model.g.cs", "*.cs|*.g.cs", ignoreCase: true));
+        Assert.False(FileMask.IsMatchAny("Program.vb", "*.cs|*.g.cs", ignoreCase: true));
+
+        Assert.True(FileMask.IsMatchAny("vector.hpp", "*.cpp,*.hpp|*_test*", ignoreCase: true));
+        Assert.False(FileMask.IsMatchAny("vector_test.cpp", "*.cpp,*.hpp|*_test*", ignoreCase: true));
+    }
+
+    /// <summary>A '|' inside a character class is one of the class's members, not the separator.</summary>
+    [Fact]
+    public void APipeInsideACharacterClassDoesNotSplitTheList()
+    {
+        Assert.True(FileMask.IsMatchAny("apple.cs", "[a|b]*.cs", ignoreCase: true));
+        Assert.True(FileMask.IsMatchAny("berry.cs", "[a|b]*.cs", ignoreCase: true));
+        Assert.True(FileMask.IsMatchAny("|weird.cs", "[a|b]*.cs", ignoreCase: true));
+        Assert.False(FileMask.IsMatchAny("cherry.cs", "[a|b]*.cs", ignoreCase: true));
+
+        // A real separator after the class still splits.
+        Assert.True(FileMask.IsMatchAny("apple.cs", "[a|b]*.cs|*.g.cs", ignoreCase: true));
+        Assert.False(FileMask.IsMatchAny("apple.g.cs", "[a|b]*.cs|*.g.cs", ignoreCase: true));
+    }
+
+    [Fact]
+    public void AnEmptyIncludeHalfBeforeThePipeMeansEverything()
+    {
+        Assert.True(FileMask.IsMatchAny("a.txt", "|*.bak", ignoreCase: true));
+        Assert.False(FileMask.IsMatchAny("a.bak", "|*.bak", ignoreCase: true));
+        Assert.False(FileMask.IsMatchAny("a.tmp", "|*.bak;*.tmp", ignoreCase: true));
+        Assert.True(FileMask.IsMatchAny("a.txt", "|", ignoreCase: true));
+    }
+
+    [Fact]
+    public void AnEmptyExcludeHalfAfterThePipeChangesNothing()
+    {
+        Assert.True(FileMask.IsMatchAny("a.cs", "*.cs|", ignoreCase: true));
+        Assert.False(FileMask.IsMatchAny("a.vb", "*.cs|", ignoreCase: true));
+    }
+
+    [Fact]
+    public void TheTwoExcludeSpellingsMixFreely()
+    {
+        const string list = "*.cs,!Generated*|*.g.cs";
+
+        Assert.True(FileMask.IsMatchAny("Program.cs", list, ignoreCase: true));
+        Assert.False(FileMask.IsMatchAny("Generated.cs", list, ignoreCase: true));
+        Assert.False(FileMask.IsMatchAny("Model.g.cs", list, ignoreCase: true));
+
+        // A '!' prefix inside the exclude half is redundant but harmless.
+        Assert.False(FileMask.IsMatchAny("a.bak", "*|!*.bak", ignoreCase: true));
+    }
+
+    [Fact]
     public void AnEmptyListFiltersNothingOut()
     {
         Assert.True(FileMask.IsMatchAny("a.txt", ""));

@@ -228,6 +228,13 @@ public sealed class ListControl : DialogControl
     /// <param name="rows">Positive scrolls down.</param>
     public void ScrollBy(int rows)
     {
+        if (_items.Count == 0)
+        {
+            // Nothing to scroll - and the cursor clamp below would be handed an inverted
+            // range (min 0, max -1), which throws. A wheel tick over an empty list is a no-op.
+            return;
+        }
+
         int height = Math.Max(1, Bounds.Height);
         int max = Math.Max(0, _items.Count - height);
         _topIndex = Math.Clamp(_topIndex + rows, 0, max);

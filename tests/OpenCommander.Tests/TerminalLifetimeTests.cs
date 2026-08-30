@@ -7,9 +7,9 @@ using OpenCommander.Theming;
 namespace OpenCommander.Tests;
 
 /// <summary>
-/// Checks that the console is always handed back on the way out, and that the one-frame
-/// <c>--screenshot</c> output does not depend on whatever codepage the host console happens to be
-/// sitting on.
+/// Checks that the console is always handed back on the way out - to the operating system at exit,
+/// and to a child command mid-session - and that the one-frame <c>--screenshot</c> output does not
+/// depend on whatever codepage the host console happens to be sitting on.
 /// </summary>
 public class TerminalLifetimeTests
 {
@@ -89,6 +89,45 @@ public class TerminalLifetimeTests
         // size never follows the console.
         terminal.Render();
         Assert.False(terminal.SyncSize());
+    }
+
+    // ------------------------------------------------------------ child command handover
+
+    [Fact]
+    public void SuspendingAndRestoringTheInputModeIsSafeInAnyOrderWhenHeadless()
+    {
+        using Terminal terminal = Terminal.Create(80, 25);
+
+        // Headless has no console input buffer to hand over, so every call is a no-op - and it
+        // must be a silent one, because CommandExecutor brackets every child with this pair
+        // unconditionally.
+        terminal.SuspendConsoleInputMode();
+        terminal.RestoreConsoleInputMode();
+        terminal.RestoreConsoleInputMode();
+        terminal.SuspendConsoleInputMode();
+        terminal.SuspendConsoleInputMode();
+        terminal.RestoreConsoleInputMode();
+    }
+
+    // ------------------------------------------------------------ cursor visibility
+
+    [Fact]
+    public void AHideCursorTransitionSurvivesAZeroCellDiff()
+    {
+        using Terminal terminal = Terminal.Create(8, 2);
+
+        terminal.SetCursor(1, 1, visible: true);
+        Assert.Contains("\u001b[?25h", terminal.BuildFrameText(), StringComparison.Ordinal);
+
+        // No cell changed, but the hide must still go out: discarding the whole frame here would
+        // leave the hardware cursor blinking on screen after SetCursor(..., false).
+        terminal.SetCursor(1, 1, visible: false);
+        string frame = terminal.BuildFrameText();
+        Assert.Contains("\u001b[?25l", frame, StringComparison.Ordinal);
+        Assert.DoesNotContain("\u001b[?25h", frame, StringComparison.Ordinal);
+
+        // Once the hidden state has been emitted, an unchanged frame collapses to nothing again.
+        Assert.Equal(string.Empty, terminal.BuildFrameText());
     }
 
     // ------------------------------------------------------------ screenshot encoding

@@ -42,7 +42,10 @@ public sealed class FilePanel : IFilePanel
     /// <summary>How many rows one wheel notch scrolls.</summary>
     public const int WheelRows = 3;
 
-    private const BoxStyle Frame = BoxStyle.Single;
+    // Far draws the outer frame double and everything inside it - the column dividers and the
+    // status separator - single, so the two styles are deliberately distinct here.
+    private const BoxStyle Frame = BoxStyle.Double;
+    private const BoxStyle InnerFrame = BoxStyle.Single;
     private const string DateFormat = "MM/dd/yy";
     private const string TimeFormat = "HH:mm";
 
@@ -184,6 +187,12 @@ public sealed class FilePanel : IFilePanel
 
     /// <summary>The fast find state; exposed so the shell can show whether a search is running.</summary>
     public QuickSearch Search => _quickSearch;
+
+    /// <summary>
+    /// Columns at the right end of the top frame the path caption must keep clear. The shell sets
+    /// this on the rightmost panel so the caption never runs underneath the clock.
+    /// </summary>
+    public int TitleReserve { get; set; }
 
     /// <summary>How many file rows the panel currently has; zero when it is too short to show any.</summary>
     public int VisibleRows
@@ -427,10 +436,10 @@ public sealed class FilePanel : IFilePanel
         CellStyle box = IsActive ? Theme.PanelBoxActive : Theme.PanelBox;
 
         buffer.Fill(b, ' ', Theme.PanelText);
-        DrawFrame(buffer, b, lastRow, box);
+        DrawFrame(buffer, b, box);
         DrawTitle(buffer, b);
 
-        char vertical = BoxChars.Vertical(Frame);
+        char vertical = BoxChars.Vertical(InnerFrame);
         foreach (int sep in layout.Separators)
         {
             buffer.VLine(x + 1 + sep, y + 1, rows + 1, vertical, box);
@@ -446,6 +455,10 @@ public sealed class FilePanel : IFilePanel
                 Theme.PanelColumnTitle,
                 HAlign.Center);
         }
+
+        // Far marks the sort mode with a letter in the top-left header cell: lowercase ascending,
+        // uppercase descending ("n" = by name, "s" = by size, ...).
+        buffer.Set(x + 1, y + 1, SortIndicator(), Theme.PanelText);
 
         if (rows > 0)
         {
@@ -476,7 +489,7 @@ public sealed class FilePanel : IFilePanel
         _quickSearch.Draw(buffer, x + 1, y + h - 1, inner, Theme.QuickSearch);
     }
 
-    private void DrawFrame(ScreenBuffer buffer, Rect b, int lastRow, CellStyle box)
+    private void DrawFrame(ScreenBuffer buffer, Rect b, CellStyle box)
     {
         int x = b.X;
         int y = b.Y;
@@ -491,7 +504,10 @@ public sealed class FilePanel : IFilePanel
         buffer.HLine(x + 1, y, inner, horizontal, box);
         buffer.Set(right, y, BoxChars.TopRight(Frame), box);
 
-        for (int row = y + 1; row <= lastRow; row++)
+        // The double verticals run all the way down to the bottom corners - through the status
+        // row too, which Far keeps inside the frame; the ╟──╢ separator below overwrites its own
+        // two edge cells with the tees.
+        for (int row = y + 1; row < bottom; row++)
         {
             buffer.Set(x, row, vertical, box);
             buffer.Set(right, row, vertical, box);
@@ -499,10 +515,11 @@ public sealed class FilePanel : IFilePanel
 
         if (ShowStatusBar)
         {
+            // A single-line separator meeting the double vertical edges, Far style: ╟────╢.
             int separator = bottom - 2;
-            buffer.Set(x, separator, BoxChars.LeftTee(Frame), box);
-            buffer.HLine(x + 1, separator, inner, horizontal, box);
-            buffer.Set(right, separator, BoxChars.RightTee(Frame), box);
+            buffer.Set(x, separator, BoxChars.LeftTee(BoxStyle.SingleV), box);
+            buffer.HLine(x + 1, separator, inner, BoxChars.Horizontal(InnerFrame), box);
+            buffer.Set(right, separator, BoxChars.RightTee(BoxStyle.SingleV), box);
         }
 
         buffer.Set(x, bottom, BoxChars.BottomLeft(Frame), box);
@@ -512,7 +529,7 @@ public sealed class FilePanel : IFilePanel
 
     private void DrawTitle(ScreenBuffer buffer, Rect b)
     {
-        int available = b.Width - 4;
+        int available = b.Width - 4 - TitleReserve;
         if (available < 3)
         {
             return;
@@ -528,7 +545,13 @@ public sealed class FilePanel : IFilePanel
 
         string title = " " + path + " ";
         CellStyle style = IsActive ? Theme.PanelTitleActive : Theme.PanelTitle;
-        buffer.Write(b.X + ((b.Width - title.Length) / 2), b.Y, title, style);
+
+        // Centred, but never into the reserved corner: a long path slides left instead of running
+        // underneath the clock.
+        int titleX = b.X + ((b.Width - title.Length) / 2);
+        int rightLimit = b.X + b.Width - 1 - TitleReserve;
+        titleX = Math.Max(b.X + 1, Math.Min(titleX, rightLimit - title.Length + 1));
+        buffer.Write(titleX, b.Y, title, style);
     }
 
     private void DrawEntries(
@@ -542,7 +565,7 @@ public sealed class FilePanel : IFilePanel
         int left = b.X + 1;
         int count = _entries.Count;
         int fields = layout.FieldsPerStripe;
-        char vertical = BoxChars.Vertical(Frame);
+        char vertical = BoxChars.Vertical(InnerFrame);
 
         for (int s = 0; s < layout.Stripes; s++)
         {
@@ -606,7 +629,8 @@ public sealed class FilePanel : IFilePanel
     private void DrawStatusLine(ScreenBuffer buffer, Rect b)
     {
         int row = b.Y + b.Height - 2;
-        buffer.Fill(new Rect(b.X, row, b.Width, 1), ' ', Theme.PanelStatus);
+        int inner = b.Width - 2;
+        buffer.Fill(new Rect(b.X + 1, row, inner, 1), ' ', Theme.PanelStatus);
 
         FileEntry? current = Current;
         if (current is null || b.Width < 4)
@@ -614,16 +638,17 @@ public sealed class FilePanel : IFilePanel
             return;
         }
 
-        // The name keeps its single leading space; the size/date/time block is flush with the
-        // panel's last column, so the two blocks bracket the row exactly as the layout wants.
+        // Only the inner cells are ours: the frame's double verticals stay on both edges, so the
+        // name gets the same single leading space as the file rows and the size/date/time block
+        // ends on the second-to-last column, flush against the right ║.
         int nameX = b.X + 1;
-        int lastX = b.X + b.Width - 1;
+        int lastX = b.X + b.Width - 2;
         string right = StatusRightText(current);
-        int rightWidth = Math.Min(right.Length, b.Width - 1);
+        int rightWidth = Math.Min(right.Length, inner);
         int rightX = lastX - rightWidth + 1;
         int nameWidth = Math.Max(0, rightX - nameX - 1);
 
-        buffer.WriteFixed(nameX, row, nameWidth, current.Name, Theme.PanelStatusFile);
+        buffer.WriteFixed(nameX, row, nameWidth, " " + current.Name, Theme.PanelStatusFile);
         buffer.WriteFixed(rightX, row, rightWidth, right, Theme.PanelStatus, HAlign.Right);
     }
 
@@ -724,8 +749,8 @@ public sealed class FilePanel : IFilePanel
     /// <returns>The marker, or <see langword="null"/> for a plain file.</returns>
     /// <remarks>
     /// The Size column and the status line both go through here, so the two can never end up
-    /// disagreeing about the same entry. The column adds the angle brackets, the status line does
-    /// not; the word itself is decided in exactly one place.
+    /// disagreeing about the same entry. Far shows the bare word in both places - no angle
+    /// brackets - and so does this panel; the word itself is decided in exactly one place.
     /// </remarks>
     private static string? DirectoryMarker(FileEntry entry)
     {
@@ -742,19 +767,44 @@ public sealed class FilePanel : IFilePanel
         return entry.IsReparsePoint ? "Symlink" : "Folder";
     }
 
+    /// <summary>
+    /// The sort letter Far shows in the top-left header cell: <c>n</c> by name, <c>x</c> by
+    /// extension, <c>w</c> by write time, <c>s</c> by size, <c>u</c> unsorted, <c>c</c> by creation
+    /// time, <c>a</c> by access time, <c>z</c> by description, <c>o</c> by owner - uppercase when
+    /// the sort is reversed.
+    /// </summary>
+    /// <returns>The letter.</returns>
+    public char SortIndicator()
+    {
+        char letter = SortMode switch
+        {
+            Files.SortMode.Name => 'n',
+            Files.SortMode.Extension => 'x',
+            Files.SortMode.Modified => 'w',
+            Files.SortMode.Size => 's',
+            Files.SortMode.Unsorted => 'u',
+            Files.SortMode.Created => 'c',
+            Files.SortMode.Accessed => 'a',
+            Files.SortMode.Description => 'z',
+            _ => 'o',
+        };
+
+        return ReverseSort ? char.ToUpperInvariant(letter) : letter;
+    }
+
     private static string SizeCellText(FileEntry entry)
     {
-        // No padding inside the brackets: the column is right aligned, so letting HAlign.Right do
-        // the work is what keeps "<Up>" flush with the byte counts above and below it.
+        // The bare word, Far style: the column is right aligned, so letting HAlign.Right do the
+        // work is what keeps "Up" flush with the byte counts above and below it.
         string? marker = DirectoryMarker(entry);
         if (marker is not null)
         {
-            return "<" + marker + ">";
+            return marker;
         }
 
-        // The exact byte count while it fits the column, the compact form once it does not - which
-        // is the same rule Far applies to the totals line.
-        string exact = SizeFormatter.Grouped(entry.Size);
+        // Far's size column shows plain ungrouped digits while they fit and the compact form once
+        // they do not; the grouped form belongs to the status and totals lines, not the column.
+        string exact = entry.Size.ToString(CultureInfo.InvariantCulture);
         return exact.Length <= PanelColumn.SizeWidth ? exact : SizeFormatter.Short(entry.Size);
     }
 
@@ -817,8 +867,6 @@ public sealed class FilePanel : IFilePanel
             // Far decides select-versus-deselect once per Shift gesture; any other key ends it.
             _shiftSelection = null;
         }
-
-        _quickSearch.ExpireIfIdle(DateTime.UtcNow);
 
         if (HandleQuickSearchKey(key))
         {
@@ -894,7 +942,7 @@ public sealed class FilePanel : IFilePanel
                 Activate(app);
                 return true;
             case ConsoleKey.Enter when ctrl:
-                app?.InsertIntoCommandLine(Current?.Name ?? string.Empty);
+                InsertCurrentName(app);
                 return true;
 
             case ConsoleKey.Backspace when none:
@@ -1271,6 +1319,21 @@ public sealed class FilePanel : IFilePanel
         Navigate(parent, LeafName(CurrentPath));
     }
 
+    private void InsertCurrentName(IAppContext? app)
+    {
+        string? name = Current?.Name;
+        if (app is null || string.IsNullOrEmpty(name))
+        {
+            return;
+        }
+
+        // The same quoting rule as Ctrl+J: the help screen documents the two as one command, so a
+        // name with a space must arrive quoted from either key. Far also appends a space after a
+        // Ctrl+Enter insertion, which is what lets repeated presses build up an argument list.
+        string text = name.Contains(' ', StringComparison.Ordinal) ? "\"" + name + "\"" : name;
+        app.InsertIntoCommandLine(text + " ");
+    }
+
     private void PromptSelectByMask(IAppContext? app, bool selected)
     {
         string? mask = app?.Ui.Input(
@@ -1318,10 +1381,29 @@ public sealed class FilePanel : IFilePanel
             return false;
         }
 
+        bool ctrl = (key.Mods & KeyMods.Ctrl) != 0;
+
         switch (key.Key)
         {
             case ConsoleKey.Escape:
+            case ConsoleKey.Enter when !ctrl:
+                // Both close the box and do nothing else; Enter activates only when pressed again.
                 _quickSearch.Cancel();
+                return true;
+
+            case ConsoleKey.Enter when ctrl:
+                // Ctrl+Enter walks to the next match, Ctrl+Shift+Enter back to the previous one.
+                bool forward = (key.Mods & KeyMods.Shift) == 0;
+                int hit = QuickSearch.Find(
+                    _entries,
+                    _quickSearch.Text,
+                    _cursor + (forward ? 1 : -1),
+                    forward);
+                if (hit >= 0)
+                {
+                    SetCursor(hit);
+                }
+
                 return true;
 
             case ConsoleKey.Backspace:
@@ -1332,7 +1414,6 @@ public sealed class FilePanel : IFilePanel
 
                 return true;
 
-            case ConsoleKey.Enter:
             case ConsoleKey.UpArrow:
             case ConsoleKey.DownArrow:
             case ConsoleKey.LeftArrow:
@@ -1346,8 +1427,10 @@ public sealed class FilePanel : IFilePanel
                 return false;
 
             default:
-                if (key.IsPlainChar)
+                if (key.IsPlainChar || (StartsQuickSearch(key) && key.Ch != '\0'))
                 {
+                    // Plain typing continues the search; so does typing with Alt still held, so a
+                    // user who keeps the modifier down never loses characters.
                     _quickSearch.Append(key.Ch, DateTime.UtcNow);
                     JumpToQuickSearchMatch(_cursor);
                     return true;

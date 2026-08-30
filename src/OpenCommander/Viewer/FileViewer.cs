@@ -126,8 +126,8 @@ public sealed class FileViewer : IScreenComponent, IDisposable
     /// <summary>The underlying byte reader, or <see langword="null"/> when the file failed to open.</summary>
     public ViewerModel? Model => _model;
 
-    /// <summary>Wrap long lines instead of scrolling horizontally (F2).</summary>
-    public bool Wrap { get; set; }
+    /// <summary>Wrap long lines instead of scrolling horizontally (F2). On by default, matching Far.</summary>
+    public bool Wrap { get; set; } = true;
 
     /// <summary>Show raw bytes instead of decoded text (F4).</summary>
     public bool HexMode { get; private set; }
@@ -417,17 +417,21 @@ public sealed class FileViewer : IScreenComponent, IDisposable
         }
     }
 
-    /// <summary>Moves the top of the viewport down one visual row. False when already at the end.</summary>
+    /// <summary>
+    /// Moves the top of the viewport down one visual row. False when the end of the file is
+    /// already visible: Far stops scrolling once the last line reaches the bottom row rather than
+    /// letting it walk up the screen with nothing but blank rows beneath.
+    /// </summary>
     private bool StepDown()
     {
-        if (_model is null)
+        if (_model is null || EndIsVisible())
         {
             return false;
         }
 
         if (Wrap)
         {
-            int count = VisualRowCount(_model.ReadLine(_top, out long next));
+            int count = VisualRowCount(Expand(_model.ReadLine(_top, out long next), TabSize));
             if (_topSubRow + 1 < count)
             {
                 _topSubRow++;
@@ -480,7 +484,7 @@ public sealed class FileViewer : IScreenComponent, IDisposable
         }
 
         _top = back;
-        _topSubRow = Wrap ? Math.Max(0, VisualRowCount(_model.ReadLine(_top, out _)) - 1) : 0;
+        _topSubRow = Wrap ? Math.Max(0, VisualRowCount(Expand(_model.ReadLine(_top, out _), TabSize)) - 1) : 0;
         return true;
     }
 
@@ -768,7 +772,13 @@ public sealed class FileViewer : IScreenComponent, IDisposable
         }
 
         long offset = HexMode ? _hexTop : _top;
-        int percent = _model.Length <= 0 ? 100 : (int)(offset * 100 / _model.Length);
+
+        // Far reports how far through the file the BOTTOM of the viewport reaches, so a file that
+        // fits on one screen reads 100% immediately and Ctrl+End always lands on 100%.
+        int percent = _model.Length <= 0
+            ? 100
+            : (int)(VisibleEndOffset(BodyRows) * 100 / _model.Length);
+
         int column = HexMode ? 0 : _hScroll;
 
         string right = string.Format(
@@ -822,6 +832,76 @@ public sealed class FileViewer : IScreenComponent, IDisposable
         long lastRow = (_model.Length - 1) / HexBytesPerRow * HexBytesPerRow;
         long page = (long)Math.Max(0, BodyRows - 1) * HexBytesPerRow;
         return Math.Max(0, lastRow - page);
+    }
+
+    /// <summary>
+    /// The byte offset just past the last content the viewport can show, which is what the status
+    /// line's percentage is measured to. In wrap mode a line partly on screen counts whole - the
+    /// cost of mapping a sub-row back to a byte offset is not worth a percent of precision.
+    /// </summary>
+    /// <param name="rows">How many body rows the viewport has.</param>
+    private long VisibleEndOffset(int rows)
+    {
+        if (_model is null)
+        {
+            return 0;
+        }
+
+        if (HexMode)
+        {
+            return Math.Min(_model.Length, _hexTop + ((long)rows * HexBytesPerRow));
+        }
+
+        long offset = _top;
+        int visual = Wrap ? -_topSubRow : 0;
+        while (visual < rows && offset < _model.Length)
+        {
+            string line = _model.ReadLine(offset, out long next);
+            visual += Wrap ? VisualRowCount(Expand(line, TabSize)) : 1;
+            if (next <= offset)
+            {
+                break;
+            }
+
+            offset = next;
+        }
+
+        return offset;
+    }
+
+    /// <summary>
+    /// Whether the end of the file is already on screen from the current top position, which is
+    /// the point Far stops downward scrolling at. Bounded: the walk gives up as soon as it has
+    /// counted one screenful of rows.
+    /// </summary>
+    private bool EndIsVisible()
+    {
+        if (_model is null)
+        {
+            return true;
+        }
+
+        int rows = BodyRows;
+        int visual = Wrap ? -_topSubRow : 0;
+        long offset = _top;
+        while (offset < _model.Length)
+        {
+            string line = _model.ReadLine(offset, out long next);
+            visual += Wrap ? VisualRowCount(Expand(line, TabSize)) : 1;
+            if (visual > rows)
+            {
+                return false;
+            }
+
+            if (next <= offset)
+            {
+                break;
+            }
+
+            offset = next;
+        }
+
+        return true;
     }
 
     private long SnapToLineStart(long offset)

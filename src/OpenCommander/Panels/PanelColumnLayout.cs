@@ -185,10 +185,14 @@ public sealed class PanelColumnLayout
     /// <summary>How many stripes a view mode asks for, before any narrowing.</summary>
     /// <param name="mode">The view mode.</param>
     /// <returns>The stripe count.</returns>
+    /// <remarks>
+    /// Wide is a single stripe: Far's mode 4 is called Wide because its <em>name column</em> is
+    /// wide - one column of names with a size beside it - not because the panel repeats it.
+    /// </remarks>
     public static int StripesOf(PanelViewMode mode) => PanelViewModes.Effective(mode) switch
     {
         PanelViewMode.Brief => 3,
-        PanelViewMode.Medium or PanelViewMode.Wide => 2,
+        PanelViewMode.Medium => 2,
         _ => 1,
     };
 

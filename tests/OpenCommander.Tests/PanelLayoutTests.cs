@@ -54,7 +54,7 @@ public class PanelColumnLayoutStripeTests
     [Theory]
     [InlineData(PanelViewMode.Brief, 3)]
     [InlineData(PanelViewMode.Medium, 2)]
-    [InlineData(PanelViewMode.Wide, 2)]
+    [InlineData(PanelViewMode.Wide, 1)]
     [InlineData(PanelViewMode.Full, 1)]
     [InlineData(PanelViewMode.Detailed, 1)]
     [InlineData(PanelViewMode.FileOwners, 1)]
@@ -105,7 +105,6 @@ public class PanelColumnLayoutStripeTests
     [Theory]
     [InlineData(PanelViewMode.Brief, 3)]
     [InlineData(PanelViewMode.Medium, 2)]
-    [InlineData(PanelViewMode.Wide, 2)]
     public void StripesCollapseWhenThePanelCannotHoldThem(PanelViewMode mode, int normalStripes)
     {
         Assert.Equal(normalStripes, PanelColumnLayout.Compute(mode, 60).Stripes);
@@ -161,18 +160,20 @@ public class PanelColumnLayoutFieldTests
     }
 
     [Fact]
-    public void WideIsTwoStripesOfNameAndSize()
+    public void WideIsASingleStripeOfAWideNameAndSize()
     {
+        // Far's mode 4 is one stripe of N,S: the mode is called Wide for the name column's sake,
+        // not because the pair repeats.
         var layout = PanelColumnLayout.Compute(PanelViewMode.Wide, 38);
 
-        Assert.Equal(2, layout.Stripes);
+        Assert.Equal(1, layout.Stripes);
         Assert.Equal(2, layout.FieldsPerStripe);
+        Assert.Equal(new[] { PanelColumnKind.Name, PanelColumnKind.Size }, layout.Fields);
 
-        // Stripe widths 19 and 18, each losing 9 + 1 to the size column.
-        Assert.Equal(9, layout.Column(0, 0).Width);
+        // 38 - (9 + 1) = 28 cells of name.
+        Assert.Equal(28, layout.Column(0, 0).Width);
         Assert.Equal(PanelColumn.SizeWidth, layout.Column(0, 1).Width);
-        Assert.Equal(8, layout.Column(1, 0).Width);
-        Assert.Equal(PanelColumn.SizeWidth, layout.Column(1, 1).Width);
+        Assert.Equal(38, layout.Column(0, 1).Right);
     }
 
     [Theory]
@@ -198,12 +199,13 @@ public class PanelColumnLayoutFieldTests
     }
 
     [Fact]
-    public void EveryStripeKeepsTheSameFieldsSoTheTitlesStayAligned()
+    public void WideDropsTheSizeColumnWhenItNoLongerFits()
     {
-        // The narrowest stripe decides, so both stripes drop the size column together.
-        var layout = PanelColumnLayout.Compute(PanelViewMode.Wide, 21);
+        // Name + size need 1 + (1 + 9) = 11 cells; one cell fewer and the size column goes,
+        // leaving a stripe of nothing but names.
+        Assert.Equal(2, PanelColumnLayout.Compute(PanelViewMode.Wide, 11).FieldsPerStripe);
 
-        Assert.Equal(2, layout.Stripes);
+        var layout = PanelColumnLayout.Compute(PanelViewMode.Wide, 10);
         Assert.Equal(1, layout.FieldsPerStripe);
         Assert.All(layout.Columns, c => Assert.Equal(PanelColumnKind.Name, c.Kind));
     }
@@ -336,18 +338,24 @@ public class PanelColumnLayoutInvariantTests
     [Fact]
     public void IntraSeparatorsAreTheOnesInsideOneStripe()
     {
-        var layout = PanelColumnLayout.Compute(PanelViewMode.Wide, 40);
+        // Wide's single stripe of name + size has one separator, and it sits inside the stripe.
+        var wide = PanelColumnLayout.Compute(PanelViewMode.Wide, 40);
 
-        // Two stripes of name + size: one separator inside each, one between them.
-        Assert.Equal(3, layout.Separators.Count);
-        Assert.Single(layout.IntraSeparators(0));
-        Assert.Single(layout.IntraSeparators(1));
-        Assert.Empty(layout.IntraSeparators(2));
+        Assert.Single(wide.Separators);
+        Assert.Single(wide.IntraSeparators(0));
+        Assert.Empty(wide.IntraSeparators(1));
 
-        foreach (int sep in layout.IntraSeparators(0))
+        foreach (int sep in wide.IntraSeparators(0))
         {
-            Assert.Contains(sep, layout.Separators);
+            Assert.Contains(sep, wide.Separators);
         }
+
+        // Medium's separator stands between its two stripes, so it is intra to neither.
+        var medium = PanelColumnLayout.Compute(PanelViewMode.Medium, 38);
+
+        Assert.Single(medium.Separators);
+        Assert.Empty(medium.IntraSeparators(0));
+        Assert.Empty(medium.IntraSeparators(1));
     }
 }
 

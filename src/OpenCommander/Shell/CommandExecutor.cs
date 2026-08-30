@@ -13,7 +13,15 @@ namespace OpenCommander.Shell;
 /// A command needs the real screen: it writes to stdout, it may prompt, it may draw its own
 /// progress. So the alternate screen buffer is left before the child starts and re-entered
 /// afterwards, which puts the command's output on the main screen where the scrollback keeps it and
-/// leaves the panels untouched underneath.
+/// leaves the panels untouched underneath. The panels come back the moment the child exits - Far
+/// never pauses here - because the output stays on the main screen, where Ctrl+O can reveal it.
+/// </para>
+/// <para>
+/// The console input mode needs the same handover: the raw mode the panels run under is a property
+/// of the input buffer every child inherits, so the cooked startup mode is put back around the
+/// child via <see cref="Terminal.SuspendConsoleInputMode"/> and
+/// <see cref="Terminal.RestoreConsoleInputMode"/>. Without that, the child gets no echo, no line
+/// editing, and a Ctrl+C that queues as a key instead of interrupting it.
 /// </para>
 /// <para>
 /// <c>cd</c> is handled here rather than being handed to the shell. A child process cannot change
@@ -36,20 +44,6 @@ public static class CommandExecutor
 
     /// <summary>Returned when the shell itself could not be started at all.</summary>
     public const int CouldNotStart = -1;
-
-    /// <summary>The prompt shown before returning to the panels.</summary>
-    public const string ContinuePrompt = "Press any key to continue...";
-
-    private const string Esc = "\u001b";
-
-    // End any open synchronized update, autowrap back on, reset the colours, show the cursor, and
-    // only then hand the main screen back.
-    private const string SuspendSequence =
-        Esc + "[?2026l" + Esc + "[?7h" + Esc + "[0m" + Esc + "[?25h" + Esc + "[?1049l";
-
-    // Retake the alternate buffer exactly the way Terminal.Create does.
-    private const string ResumeSequence =
-        Esc + "[?1049h" + Esc + "[?25l" + Esc + "[?7l" + Esc + "[2J" + Esc + "[H";
 
     /// <summary>
     /// Runs a command line, showing its output on the main screen.
@@ -80,7 +74,12 @@ public static class CommandExecutor
     /// <see cref="CouldNotStart"/> when the shell could not be launched, or <c>0</c> for a blank
     /// command line.
     /// </returns>
-    public static int Run(string command, string workingDirectory, Terminal terminal, out string? changeDirectory)
+    public static int Run(
+        string command,
+        string workingDirectory,
+        Terminal terminal,
+        out string? changeDirectory,
+        bool resumeAltScreen = true)
     {
         ArgumentNullException.ThrowIfNull(terminal);
 
@@ -104,14 +103,11 @@ public static class CommandExecutor
             return 0;
         }
 
-        Suspend();
+        Suspend(terminal);
 
         int exitCode = CouldNotStart;
-        bool producedOutput = true;
         try
         {
-            (int row, int column) start = CursorPosition();
-
             using Process? process = Process.Start(BuildStartInfo(command, workingDirectory));
             if (process is null)
             {
@@ -121,12 +117,6 @@ public static class CommandExecutor
             {
                 process.WaitForExit();
                 exitCode = process.ExitCode;
-
-                (int row, int column) end = CursorPosition();
-
-                // An unreadable cursor means we cannot tell, so assume the command said something
-                // worth reading rather than wiping it away.
-                producedOutput = start.row < 0 || end.row < 0 || end != start;
             }
         }
         catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException or PlatformNotSupportedException or IOException or UnauthorizedAccessException)
@@ -136,12 +126,7 @@ public static class CommandExecutor
             exitCode = CouldNotStart;
         }
 
-        if (producedOutput || exitCode != 0)
-        {
-            WaitForKey();
-        }
-
-        Resume(terminal);
+        Resume(terminal, resumeAltScreen);
         return exitCode;
     }
 
@@ -153,10 +138,13 @@ public static class CommandExecutor
     /// <param name="target">The absolute target directory, or an empty string when this is not a <c>cd</c>.</param>
     /// <returns><see langword="true"/> when the command line is a directory change.</returns>
     /// <remarks>
-    /// Recognises <c>cd</c>, <c>chdir</c> and the Unix habit of typing <c>cd</c> with no argument to
-    /// mean "go home". A bare drive letter such as <c>D:</c> counts too, because that is how a
-    /// Windows user changes drive from a prompt. The <c>/d</c> switch <c>cmd</c> accepts is ignored:
-    /// this always changes drive as well as directory.
+    /// Recognises <c>cd</c>, <c>chdir</c>, the Unix habit of typing <c>cd</c> with no argument to
+    /// mean "go home", and <c>cmd</c>'s spacing-free spellings <c>cd..</c>, <c>cd\</c> and
+    /// <c>cd/</c>. A bare drive letter such as <c>D:</c> counts too, because that is how a Windows
+    /// user changes drive from a prompt. The <c>/d</c> switch <c>cmd</c> accepts is ignored: this
+    /// always changes drive as well as directory. An argument containing an unquoted shell
+    /// operator - <c>cd src &amp;&amp; dotnet build</c> - is not a directory change: the whole line
+    /// belongs to the shell, whose operators then run as typed.
     /// </remarks>
     public static bool TryParseCd(string command, string currentDir, out string target)
     {
@@ -182,13 +170,26 @@ public static class CommandExecutor
 
         int space = text.IndexOfAny(Whitespace);
         string verb = space < 0 ? text : text[..space];
-        if (!string.Equals(verb, "cd", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(verb, "chdir", StringComparison.OrdinalIgnoreCase))
+        string argument;
+        if (string.Equals(verb, "cd", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(verb, "chdir", StringComparison.OrdinalIgnoreCase))
+        {
+            argument = space < 0 ? string.Empty : text[(space + 1)..].Trim();
+        }
+        else if (!TrySplitCompactCd(text, out argument))
         {
             return false;
         }
 
-        string argument = space < 0 ? string.Empty : text[(space + 1)..].Trim();
+        // An unquoted "&", "|", "<" or ">" means the line is a compound command or a redirection,
+        // not a path that happens to contain one - all four are legal filename characters on some
+        // platform, which is why the check respects quotes. Handing the line to the shell keeps
+        // the operators doing what the user asked instead of silently discarding everything after
+        // the "cd".
+        if (ContainsShellOperator(argument))
+        {
+            return false;
+        }
 
         // "cd /d C:\Work" - cmd's "change drive too" switch, which is what we do regardless.
         if (OperatingSystem.IsWindows() &&
@@ -224,6 +225,59 @@ public static class CommandExecutor
 
         target = resolved;
         return true;
+    }
+
+    /// <summary>
+    /// Recognises <c>cmd</c>'s spacing-free <c>cd</c> spellings, where the argument starts right
+    /// after the verb: <c>cd..</c>, <c>cd\</c>, <c>cd/</c> and longer forms like <c>cd..\sub</c>.
+    /// </summary>
+    /// <param name="text">The trimmed command line.</param>
+    /// <param name="argument">The argument following the verb, or an empty string.</param>
+    /// <returns><see langword="true"/> when the text is a spacing-free directory change.</returns>
+    /// <remarks>
+    /// Only <c>.</c>, <c>\</c> and <c>/</c> may follow the verb directly - exactly the characters
+    /// <c>cmd</c> accepts there. Anything else (<c>cdrom</c>, <c>cd&amp;&amp;whoami</c>) is an
+    /// ordinary command for the shell.
+    /// </remarks>
+    private static bool TrySplitCompactCd(string text, out string argument)
+    {
+        foreach (string verb in CdVerbs)
+        {
+            if (text.Length > verb.Length &&
+                text.StartsWith(verb, StringComparison.OrdinalIgnoreCase) &&
+                text[verb.Length] is '.' or '\\' or '/')
+            {
+                argument = text[verb.Length..].Trim();
+                return true;
+            }
+        }
+
+        argument = string.Empty;
+        return false;
+    }
+
+    /// <summary>
+    /// Whether the argument contains a shell operator - <c>&amp;</c>, <c>|</c>, <c>&lt;</c> or
+    /// <c>&gt;</c> - outside double quotes, which makes the line the shell's to run.
+    /// </summary>
+    /// <param name="argument">The would-be <c>cd</c> argument, exactly as typed.</param>
+    /// <returns><see langword="true"/> when an unquoted operator is present.</returns>
+    private static bool ContainsShellOperator(string argument)
+    {
+        bool quoted = false;
+        foreach (char c in argument)
+        {
+            if (c == '"')
+            {
+                quoted = !quoted;
+            }
+            else if (!quoted && c is '&' or '|' or '<' or '>')
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -316,12 +370,28 @@ public static class CommandExecutor
         return info;
     }
 
-    private static void Suspend() => Write(SuspendSequence);
-
-    private static void Resume(Terminal terminal)
+    private static void Suspend(Terminal terminal)
     {
-        Write(ResumeSequence);
-        terminal.Invalidate();
+        // Through the terminal rather than a raw write, so its record of which buffer is up stays
+        // truthful - Ctrl+O may already have the user screen showing, making this a no-op.
+        terminal.ShowUserScreen();
+
+        // After the screen, the keyboard: hand the child the cooked input mode it expects, so
+        // its prompts echo and its Ctrl+C interrupts.
+        terminal.SuspendConsoleInputMode();
+    }
+
+    private static void Resume(Terminal terminal, bool altScreen)
+    {
+        terminal.RestoreConsoleInputMode();
+
+        // With the panels hidden (Ctrl+O) the shell asks to stay on the user screen, exactly as
+        // Far does after running a command with the panels off.
+        if (altScreen)
+        {
+            terminal.ShowPanelsScreen();
+            terminal.Invalidate();
+        }
     }
 
     private static void Write(string text)
@@ -350,41 +420,8 @@ public static class CommandExecutor
         }
     }
 
-    private static void WaitForKey()
-    {
-        WriteLine(string.Empty);
-        Write(ContinuePrompt);
-
-        try
-        {
-            if (!Console.IsInputRedirected)
-            {
-                Console.ReadKey(intercept: true);
-            }
-        }
-        catch (Exception e) when (e is InvalidOperationException or IOException)
-        {
-            // No console input; fall through and repaint.
-        }
-
-        WriteLine(string.Empty);
-    }
-
-    /// <summary>
-    /// The cursor position, used only to tell whether the command wrote anything. Unreadable on
-    /// some terminals, in which case the caller conservatively assumes output.
-    /// </summary>
-    private static (int Row, int Column) CursorPosition()
-    {
-        try
-        {
-            return (Console.CursorTop, Console.CursorLeft);
-        }
-        catch (Exception e) when (e is IOException or InvalidOperationException or PlatformNotSupportedException)
-        {
-            return (-1, -1);
-        }
-    }
-
     private static readonly char[] Whitespace = [' ', '\t'];
+
+    /// <summary>The directory-change verbs, longest first so a prefix test tries them in order.</summary>
+    private static readonly string[] CdVerbs = ["chdir", "cd"];
 }

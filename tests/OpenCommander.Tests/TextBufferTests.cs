@@ -95,6 +95,13 @@ public class TextBufferContentTests
         Assert.Equal((0, 0), buffer.Clamp(-3, -3));
         Assert.Equal((1, 4), buffer.EndPosition);
     }
+
+    [Fact]
+    public void TheDefaultTabStopIsEightMatchingFarAndTheViewer()
+    {
+        Assert.Equal(8, TextBuffer.DefaultTabSize);
+        Assert.Equal(8, new TextBuffer().TabSize);
+    }
 }
 
 public class TextBufferEditTests
@@ -726,6 +733,31 @@ public class TextBufferIndentAndSearchTests
     }
 
     [Fact]
+    public void FindBackwardsSeesAMatchStraddlingTheStartColumn()
+    {
+        var buffer = Lf("hello");
+
+        // The match starts before column 3 but extends past it; only its start is constrained.
+        Assert.True(buffer.Find("hello", 0, 3, ignoreCase: false, backwards: true, out int line, out int column));
+        Assert.Equal((0, 0), (line, column));
+    }
+
+    [Fact]
+    public void FindBackwardsConstrainsTheMatchStartNotItsEnd()
+    {
+        var buffer = Lf("abab");
+
+        Assert.True(buffer.Find("ab", 0, 3, ignoreCase: false, backwards: true, out int line, out int column));
+        Assert.Equal((0, 2), (line, column));
+
+        // A match starting exactly at the column is at the position, not before it.
+        Assert.True(buffer.Find("ab", 0, 2, ignoreCase: false, backwards: true, out line, out column));
+        Assert.Equal((0, 0), (line, column));
+
+        Assert.False(buffer.Find("ab", 0, 0, ignoreCase: false, backwards: true, out _, out _));
+    }
+
+    [Fact]
     public void AnEmptyNeedleNeverMatches()
     {
         var buffer = Lf("abc");
@@ -1141,6 +1173,46 @@ public class FileEditorComponentTests
     }
 
     [Fact]
+    public void CtrlDownScrollsTheViewAndDragsTheCaretAlong()
+    {
+        var text = string.Join('\n', Enumerable.Range(0, 100).Select(i => $"line{i:000}"));
+        var editor = Editor(text);
+        editor.RenderToText(40, 10);
+
+        editor.HandleInput(Key(ConsoleKey.DownArrow, OpenCommander.Input.KeyMods.Ctrl));
+
+        // The scroll sticks: the caret was pulled onto the new top row, so the next draw's
+        // scroll-into-view has nothing to snap back.
+        string[] rows = editor.RenderToText(40, 10).Split('\n');
+        Assert.StartsWith("line001", rows[0], StringComparison.Ordinal);
+        Assert.Equal(1, editor.TopLine);
+        Assert.Equal(1, editor.Cursor.Line);
+
+        editor.HandleInput(Key(ConsoleKey.UpArrow, OpenCommander.Input.KeyMods.Ctrl));
+        Assert.Equal(0, editor.TopLine);
+    }
+
+    [Fact]
+    public void TheMouseWheelScrollsWithoutSnappingBackToTheCaret()
+    {
+        var text = string.Join('\n', Enumerable.Range(0, 100).Select(i => $"line{i:000}"));
+        var editor = Editor(text);
+        editor.RenderToText(40, 10);
+
+        editor.HandleInput(OpenCommander.Input.InputEvent.FromMouse(new OpenCommander.Input.MouseEvent(
+            OpenCommander.Input.MouseKind.Wheel,
+            0,
+            0,
+            OpenCommander.Input.MouseButton.None,
+            -1,
+            OpenCommander.Input.KeyMods.None)));
+
+        Assert.Equal(3, editor.TopLine);
+        Assert.Equal(3, editor.Cursor.Line);
+        Assert.StartsWith("line003", editor.RenderToText(40, 10).Split('\n')[0], StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void SearchSelectsTheMatch()
     {
         var ui = new FakeUi();
@@ -1165,6 +1237,37 @@ public class FileEditorComponentTests
         editor.HandleInput(Key(ConsoleKey.F7));
 
         Assert.Contains(ui.Shown, s => s.Contains("not found", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void AFreshSearchFindsAMatchSittingExactlyUnderTheCaret()
+    {
+        var ui = new FakeUi();
+        ui.Answers.Enqueue("alpha");
+        var editor = Editor("alpha\n", ui);
+
+        editor.HandleInput(Key(ConsoleKey.F7));
+
+        Assert.True(editor.Cursor.HasSelection);
+        Assert.Equal((0, 0), editor.Cursor.SelectionStart);
+        Assert.Equal((0, 5), editor.Cursor.SelectionEnd);
+        Assert.DoesNotContain(ui.Shown, s => s.Contains("not found", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ContinueSearchFindsAnOccurrenceFlushAgainstThePreviousMatch()
+    {
+        var ui = new FakeUi();
+        ui.Answers.Enqueue("ab");
+        var editor = Editor("abab\n", ui);
+
+        editor.HandleInput(Key(ConsoleKey.F7));
+        Assert.Equal((0, 0), editor.Cursor.SelectionStart);
+
+        // Shift+F7 continues from the end of the previous match, so the adjacent one is next.
+        editor.HandleInput(Key(ConsoleKey.F7, OpenCommander.Input.KeyMods.Shift));
+        Assert.Equal((0, 2), editor.Cursor.SelectionStart);
+        Assert.Equal((0, 4), editor.Cursor.SelectionEnd);
     }
 
     [Fact]

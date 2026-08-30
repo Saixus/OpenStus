@@ -195,6 +195,15 @@ public abstract class DialogControl
     /// <returns><see langword="true"/> when something happened.</returns>
     public virtual bool Activate() => false;
 
+    /// <summary>
+    /// Called by the owning dialog whenever the focus lands on this control after having been
+    /// elsewhere. The base implementation does nothing; an edit field selects its whole text
+    /// here, Far style.
+    /// </summary>
+    protected internal virtual void OnFocusEntered()
+    {
+    }
+
     /// <summary>The width the control would like to be given, used by the self-sizing dialogs.</summary>
     public virtual int PreferredWidth => Bounds.Width;
 }

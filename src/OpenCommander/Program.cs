@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Text;
 using OpenCommander.Core;
 using OpenCommander.Rendering;
@@ -12,6 +13,19 @@ internal static class Program
 
     /// <summary>Exit code for an unexpected failure.</summary>
     public const int ExitFailure = 1;
+
+    /// <summary>
+    /// Makes the legacy Windows code pages (windows-125x and friends) available to
+    /// <see cref="Encoding.GetEncoding(int)"/>. A stock .NET runtime ships only the Unicode
+    /// encodings, so without this <see cref="Text.EncodingDetector.AnsiFallback"/> could never
+    /// resolve the operating system's real ANSI code page and every legacy text file would decode
+    /// as Latin-1 mojibake. A module initializer rather than a line in <see cref="Main"/> so that
+    /// the tests, which never run <see cref="Main"/>, decode exactly like the shipped binary.
+    /// Registering is idempotent for the shared <see cref="CodePagesEncodingProvider.Instance"/>.
+    /// </summary>
+    [ModuleInitializer]
+    internal static void RegisterLegacyCodePages() =>
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
     /// <summary>
     /// Runs Open Commander.

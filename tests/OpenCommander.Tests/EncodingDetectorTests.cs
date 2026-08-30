@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Text;
 using OpenCommander.Text;
 
@@ -169,6 +170,38 @@ public class EncodingDetectorUtf8HeuristicTests
         var fallback = EncodingDetector.AnsiFallback;
         Assert.Equal(bytes, fallback.GetBytes(fallback.GetString(bytes)));
     }
+
+    [Fact]
+    public void OnWindowsTheFallbackIsTheSystemAnsiCodePage()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        // Touching the detector first guarantees the OpenCommander module initializer - which
+        // registers the code pages provider - has run before GetEncoding is asked for the ACP.
+        Encoding fallback = EncodingDetector.AnsiFallback;
+
+        Encoding acp;
+        try
+        {
+            acp = Encoding.GetEncoding((int)GetACP());
+        }
+        catch (Exception e) when (e is ArgumentException or NotSupportedException)
+        {
+            return; // An exotic ACP the provider cannot serve: Latin-1 stands in, tested above.
+        }
+
+        // A double byte ANSI page (the CJK ones) is deliberately refused: it could not round-trip
+        // an arbitrary unrecognised file, so Latin-1 stands in until code page switching exists.
+        int expected = acp.IsSingleByte ? acp.CodePage : Encoding.Latin1.CodePage;
+        Assert.Equal(expected, fallback.CodePage);
+        Assert.True(fallback.IsSingleByte);
+    }
+
+    [DllImport("kernel32.dll", ExactSpelling = true)]
+    private static extern uint GetACP();
 }
 
 public class EncodingDetectorBinaryAndNamingTests
