@@ -658,13 +658,17 @@ public sealed class FilePanel : IFilePanel
         int row = b.Y + b.Height - 1;
         int available = b.Width - 2;
 
+        // Once anything is tagged the line shows the selection, and Far paints that in yellow
+        // (COL_PANELSELECTEDINFO) - pressing Ins is visible at the bottom too.
+        CellStyle style = HasSelection ? Theme.PanelSelectedTotals : Theme.PanelTotals;
+
         if (totals.Length > available)
         {
-            buffer.WriteFixed(b.X + 1, row, available, totals, Theme.PanelTotals, HAlign.Center);
+            buffer.WriteFixed(b.X + 1, row, available, totals, style, HAlign.Center);
             return;
         }
 
-        buffer.Write(b.X + ((b.Width - totals.Length) / 2), row, totals, Theme.PanelTotals);
+        buffer.Write(b.X + ((b.Width - totals.Length) / 2), row, totals, style);
     }
 
     /// <summary>

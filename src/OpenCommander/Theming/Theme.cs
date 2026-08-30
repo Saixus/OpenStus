@@ -98,6 +98,12 @@ public sealed class Theme
     /// <summary>Totals line in the bottom frame.</summary>
     public CellStyle PanelTotals { get; set; }
 
+    /// <summary>
+    /// The totals line while it shows the tagged selection - yellow in Far, so pressing Ins is
+    /// visible at the bottom of the panel too.
+    /// </summary>
+    public CellStyle PanelSelectedTotals { get; set; }
+
     /// <summary>Panel scroll bar.</summary>
     public CellStyle PanelScrollBar { get; set; }
 
@@ -399,6 +405,7 @@ public sealed class Theme
         t.PanelStatus = new CellStyle(white, bBlue);             // no Far palette entry
         t.PanelStatusFile = new CellStyle(white, bBlue);         // no Far palette entry
         t.PanelTotals = new CellStyle(lightCyan, bBlue);         // COL_PANELTOTALINFO       :85
+        t.PanelSelectedTotals = new CellStyle(yellow, bBlue);    // COL_PANELSELECTEDINFO    :86
         t.PanelScrollBar = new CellStyle(lightCyan, bBlue);      // COL_PANELSCROLLBAR       :130
         t.PanelEmpty = new CellStyle(lightCyan, bBlue);          // the panel's own ground = COL_PANELTEXT
         t.PanelDriveInfo = new CellStyle(white, bBlue);          // no Far palette entry
@@ -510,6 +517,7 @@ public sealed class Theme
         new("PanelStatus", t => t.PanelStatus, (t, v) => t.PanelStatus = v),
         new("PanelStatusFile", t => t.PanelStatusFile, (t, v) => t.PanelStatusFile = v),
         new("PanelTotals", t => t.PanelTotals, (t, v) => t.PanelTotals = v),
+        new("PanelSelectedTotals", t => t.PanelSelectedTotals, (t, v) => t.PanelSelectedTotals = v),
         new("PanelScrollBar", t => t.PanelScrollBar, (t, v) => t.PanelScrollBar = v),
         new("PanelEmpty", t => t.PanelEmpty, (t, v) => t.PanelEmpty = v),
         new("PanelDriveInfo", t => t.PanelDriveInfo, (t, v) => t.PanelDriveInfo = v),

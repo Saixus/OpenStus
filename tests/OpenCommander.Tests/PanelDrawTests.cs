@@ -360,6 +360,11 @@ public class PanelDrawTests
 
         Assert.Contains(" Selected: 2.0 K, files: 1, folders: 1 ", lines[19], StringComparison.Ordinal);
         Assert.DoesNotContain("Bytes:", lines[19], StringComparison.Ordinal);
+
+        // Far paints the selection totals yellow (COL_PANELSELECTEDINFO), so the tagging shows at
+        // the bottom of the panel as well as on the names.
+        int start = buffer.RenderPlainText().Split('\n')[19].IndexOf("Selected", StringComparison.Ordinal);
+        Assert.Equal(Theme.FarDefault().PanelSelectedTotals, buffer.Get(start, 19).Style);
     }
 
     [Fact]

@@ -29,6 +29,7 @@ public class ThemeDefaultsTests
         Assert.Equal(Style(ConsoleColor.White, ConsoleColor.DarkBlue), t.PanelStatus);
         Assert.Equal(Style(ConsoleColor.White, ConsoleColor.DarkBlue), t.PanelStatusFile);
         Assert.Equal(Style(ConsoleColor.Cyan, ConsoleColor.DarkBlue), t.PanelTotals);        // :85
+        Assert.Equal(Style(ConsoleColor.Yellow, ConsoleColor.DarkBlue), t.PanelSelectedTotals); // :86
         Assert.Equal(Style(ConsoleColor.Cyan, ConsoleColor.DarkBlue), t.PanelScrollBar);     // :130
         Assert.Equal(Style(ConsoleColor.Cyan, ConsoleColor.DarkBlue), t.PanelEmpty);
         Assert.Equal(Style(ConsoleColor.White, ConsoleColor.DarkBlue), t.PanelDriveInfo);
@@ -191,8 +192,8 @@ public class ThemeDefaultsTests
     [Fact]
     public void EveryContractMemberIsAddressableAndTheTableIsComplete()
     {
-        Assert.Equal(74, Theme.Slots.Count);
-        Assert.Equal(74, Theme.Slots.Select(s => s.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.Equal(75, Theme.Slots.Count);
+        Assert.Equal(75, Theme.Slots.Select(s => s.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count());
 
         var t = Theme.FarDefault();
         foreach (var slot in Theme.Slots)
