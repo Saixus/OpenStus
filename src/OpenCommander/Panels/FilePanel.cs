@@ -639,8 +639,8 @@ public sealed class FilePanel : IFilePanel
         }
 
         // Only the inner cells are ours: the frame's double verticals stay on both edges, so the
-        // name gets the same single leading space as the file rows and the size/date/time block
-        // ends on the second-to-last column, flush against the right ║.
+        // name starts flush against the left ║ - the same as the file rows - and the
+        // size/date/time block ends on the second-to-last column, flush against the right ║.
         int nameX = b.X + 1;
         int lastX = b.X + b.Width - 2;
         string right = StatusRightText(current);
@@ -648,7 +648,7 @@ public sealed class FilePanel : IFilePanel
         int rightX = lastX - rightWidth + 1;
         int nameWidth = Math.Max(0, rightX - nameX - 1);
 
-        buffer.WriteFixed(nameX, row, nameWidth, " " + current.Name, Theme.PanelStatusFile);
+        buffer.WriteFixed(nameX, row, nameWidth, current.Name, Theme.PanelStatusFile);
         buffer.WriteFixed(rightX, row, rightWidth, right, Theme.PanelStatus, HAlign.Right);
     }
 
@@ -726,7 +726,7 @@ public sealed class FilePanel : IFilePanel
     /// <summary>The text one column shows for one entry.</summary>
     /// <param name="entry">The entry.</param>
     /// <param name="kind">The column kind.</param>
-    /// <returns>The text, name columns included with their one leading space of padding.</returns>
+    /// <returns>The text; names start flush at the column's first cell, as in Far.</returns>
     public static string CellText(FileEntry entry, PanelColumnKind kind)
     {
         ArgumentNullException.ThrowIfNull(entry);
@@ -737,7 +737,7 @@ public sealed class FilePanel : IFilePanel
             PanelColumnKind.Date => entry.Modified.ToString(DateFormat, CultureInfo.InvariantCulture),
             PanelColumnKind.Time => entry.Modified.ToString(TimeFormat, CultureInfo.InvariantCulture),
             PanelColumnKind.Attributes => entry.AttributeString,
-            _ => " " + entry.Name,
+            _ => entry.Name,
         };
     }
 

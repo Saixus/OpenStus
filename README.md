@@ -25,20 +25,20 @@ oc --screenshot --size 120x28 --clock 10:06 --left . --right ./src/OpenCommander
 ```
 ╔═════════════ C:\Work\!Lab\Git\OpenCommander ═════════════╗╔═══ …it\OpenCommander\src\OpenCommander\Rendering ═10:06 AM
 ║n           Name             │            Name            ║║n           Name             │            Name            ║
-║ ..                          │                            ║║ ..                          │                            ║
-║ .git                        │                            ║║ BoxChars.cs                 │                            ║
-║ .github                     │                            ║║ Cell.cs                     │                            ║
-║ .vs                         │                            ║║ CellStyle.cs                │                            ║
-║ src                         │                            ║║ ColorDepth.cs               │                            ║
-║ tests                       │                            ║║ Palette.cs                  │                            ║
-║ .editorconfig               │                            ║║ Rect.cs                     │                            ║
-║ .gitignore                  │                            ║║ ScreenBuffer.cs             │                            ║
-║ CHANGELOG.md                │                            ║║ Terminal.cs                 │                            ║
-║ CONTRIBUTING.md             │                            ║║                             │                            ║
-║ Directory.Build.props       │                            ║║                             │                            ║
-║ LICENSE                     │                            ║║                             │                            ║
-║ OpenCommander.sln           │                            ║║                             │                            ║
-║ README.md                   │                            ║║                             │                            ║
+║..                           │                            ║║..                           │                            ║
+║.git                         │                            ║║BoxChars.cs                  │                            ║
+║.github                      │                            ║║Cell.cs                      │                            ║
+║.vs                          │                            ║║CellStyle.cs                 │                            ║
+║src                          │                            ║║ColorDepth.cs                │                            ║
+║tests                        │                            ║║Palette.cs                   │                            ║
+║.editorconfig                │                            ║║Rect.cs                      │                            ║
+║.gitignore                   │                            ║║ScreenBuffer.cs              │                            ║
+║CHANGELOG.md                 │                            ║║Terminal.cs                  │                            ║
+║CONTRIBUTING.md              │                            ║║                             │                            ║
+║Directory.Build.props        │                            ║║                             │                            ║
+║LICENSE                      │                            ║║                             │                            ║
+║OpenCommander.sln            │                            ║║                             │                            ║
+║README.md                    │                            ║║                             │                            ║
 ║                             │                            ║║                             │                            ║
 ║                             │                            ║║                             │                            ║
 ║                             │                            ║║                             │                            ║
@@ -47,8 +47,8 @@ oc --screenshot --size 120x28 --clock 10:06 --left . --right ./src/OpenCommander
 ║                             │                            ║║                             │                            ║
 ║                             │                            ║║                             │                            ║
 ╟──────────────────────────────────────────────────────────╢╟──────────────────────────────────────────────────────────╢
-║ ..                                    Up  08/28/26  19:21║║ ..                                    Up  08/30/26  21:38║
-╚══════════ Bytes: 47.8 K, files: 8, folders: 5 ═══════════╝╚══════════ Bytes: 82.8 K, files: 8, folders: 0 ═══════════╝
+║..                                     Up  08/28/26  19:21║║..                                     Up  08/30/26  21:38║
+╚══════════ Bytes: 51.3 K, files: 8, folders: 5 ═══════════╝╚══════════ Bytes: 82.8 K, files: 8, folders: 0 ═══════════╝
 C:\Work\!Lab\Git\OpenCommander>
 1Help    2UserMn    3View    4Edit    5Copy    6RenMov    7MkFold    8Delete   9ConfMn   10Quit   11Plugin   12Screen
 ```

@@ -222,9 +222,9 @@ public class PanelDrawTests
     {
         string[] lines = PanelFixture.Render(PanelFixture.Panel());
 
-        Assert.Equal("║ ..                │                  ║", lines[2]);
-        Assert.Equal("║ Documents         │                  ║", lines[3]);
-        Assert.Equal("║ Projects          │                  ║", lines[4]);
+        Assert.Equal("║..                 │                  ║", lines[2]);
+        Assert.Equal("║Documents          │                  ║", lines[3]);
+        Assert.Equal("║Projects           │                  ║", lines[4]);
     }
 
     [Fact]
@@ -235,7 +235,7 @@ public class PanelDrawTests
 
         string[] lines = PanelFixture.Render(panel);
 
-        Assert.StartsWith("║ notes.txt", lines[18], StringComparison.Ordinal);
+        Assert.StartsWith("║notes.txt", lines[18], StringComparison.Ordinal);
         Assert.EndsWith("1 234  08/08/26  14:30║", lines[18], StringComparison.Ordinal);
     }
 
@@ -287,17 +287,16 @@ public class PanelDrawTests
     }
 
     [Fact]
-    public void TheStatusLineKeepsItsSingleLeadingSpaceBeforeTheName()
+    public void TheStatusLineNameStartsFlushAgainstTheFrame()
     {
         var panel = PanelFixture.Panel();
         panel.CursorIndex = 4;
 
         PanelFixture.Render(panel, out ScreenBuffer buffer);
 
-        // The frame first, then the same one space of padding the file rows give their names.
+        // The frame, then the name at once - no padding, the same as the file rows in Far.
         Assert.Equal('║', buffer.Get(0, 18).Ch);
-        Assert.Equal(' ', buffer.Get(1, 18).Ch);
-        Assert.Equal('n', buffer.Get(2, 18).Ch);
+        Assert.Equal('n', buffer.Get(1, 18).Ch);
     }
 
     [Fact]
@@ -412,9 +411,9 @@ public class PanelDrawTests
         string[] lines = PanelFixture.Render(panel);
 
         Assert.Equal("║n   Name     │  Size   │  Date  │Time ║", lines[1]);
-        Assert.Equal("║ ..          │       Up│08/08/26│14:30║", lines[2]);
-        Assert.Equal("║ Documents   │   Folder│08/08/26│14:30║", lines[3]);
-        Assert.Equal("║ notes.txt   │     1234│08/08/26│14:30║", lines[6]);
+        Assert.Equal("║..           │       Up│08/08/26│14:30║", lines[2]);
+        Assert.Equal("║Documents    │   Folder│08/08/26│14:30║", lines[3]);
+        Assert.Equal("║notes.txt    │     1234│08/08/26│14:30║", lines[6]);
     }
 
     [Fact]
@@ -454,8 +453,8 @@ public class PanelDrawTests
 
         string[] lines = PanelFixture.Render(panel);
 
-        Assert.StartsWith("║ file000.txt", lines[2], StringComparison.Ordinal);
-        Assert.StartsWith("║ file014.txt", lines[16], StringComparison.Ordinal);
+        Assert.StartsWith("║file000.txt", lines[2], StringComparison.Ordinal);
+        Assert.StartsWith("║file014.txt", lines[16], StringComparison.Ordinal);
         Assert.Contains("file015.txt", lines[2]);
         Assert.Contains("file019.txt", lines[6]);
     }
