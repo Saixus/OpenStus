@@ -261,6 +261,94 @@ public class SyntaxTokenizerTests
     }
 
     [Fact]
+    public void MarkupColoursTagsAttributesCommentsAndEntities()
+    {
+        SyntaxRules xml = SyntaxRegistry.ForPath("a.xml")!;
+        const string Line = "<item id=\"7\">a &amp; b</item> <!-- note -->";
+        List<TokenSpan> tokens = Tokens(Line, xml);
+
+        Assert.Contains(tokens, t => t.Kind == TokenKind.Keyword && Slice(Line, t) == "<item");
+        Assert.Contains(tokens, t => t.Kind == TokenKind.String && Slice(Line, t) == "\"7\"");
+        Assert.Contains(tokens, t => t.Kind == TokenKind.Number && Slice(Line, t) == "&amp;");
+        Assert.Contains(tokens, t => t.Kind == TokenKind.Keyword && Slice(Line, t) == "</item");
+        Assert.Contains(tokens, t => t.Kind == TokenKind.Comment && Slice(Line, t) == "<!-- note -->");
+    }
+
+    [Fact]
+    public void MarkupCarriesTagsCommentsAndCDataAcrossLines()
+    {
+        SyntaxRules xml = SyntaxRegistry.ForPath("a.xml")!;
+
+        // A tag broken across lines: the attribute on the continuation line is still a string.
+        SyntaxState state = SyntaxTokenizer.ScanLine("<a href=\"x\"", xml, default);
+        Assert.Equal(SyntaxMode.InsideTag, state.Mode);
+        var tokens = new List<TokenSpan>();
+        state = SyntaxTokenizer.TokenizeLine("   title=\"t\">tail", xml, state, tokens);
+        Assert.Equal(SyntaxMode.None, state.Mode);
+        Assert.Contains(tokens, t => t.Kind == TokenKind.String && t.Length == 3);
+
+        // Comments and CDATA sections span lines through their own states.
+        state = SyntaxTokenizer.ScanLine("<!-- open", xml, default);
+        Assert.Equal(SyntaxMode.BlockComment, state.Mode);
+        state = SyntaxTokenizer.ScanLine("still --> <x/>", xml, state);
+        Assert.Equal(SyntaxMode.None, state.Mode);
+
+        state = SyntaxTokenizer.ScanLine("<![CDATA[ raw <notatag>", xml, default);
+        Assert.Equal(SyntaxMode.RawText, state.Mode);
+        state = SyntaxTokenizer.ScanLine("done ]]>", xml, state);
+        Assert.Equal(SyntaxMode.None, state.Mode);
+    }
+
+    [Fact]
+    public void MarkupColoursDeclarationsAsPreprocessor()
+    {
+        SyntaxRules xml = SyntaxRegistry.ForPath("a.xml")!;
+        const string Line = "<?xml version=\"1.0\"?><!DOCTYPE html>";
+        List<TokenSpan> tokens = Tokens(Line, xml);
+
+        Assert.Equal(2, tokens.Count(t => t.Kind == TokenKind.Preprocessor));
+    }
+
+    [Fact]
+    public void MarkdownColoursHeadingsFencesCodeLinksAndQuotes()
+    {
+        SyntaxRules md = SyntaxRegistry.ForPath("a.md")!;
+
+        TokenSpan heading = Assert.Single(Tokens("# Title", md));
+        Assert.Equal(TokenKind.Keyword, heading.Kind);
+
+        TokenSpan quote = Assert.Single(Tokens("> quoted text", md));
+        Assert.Equal(TokenKind.Comment, quote.Kind);
+
+        const string Inline = "Use `dotnet build` here";
+        TokenSpan code = Assert.Single(Tokens(Inline, md));
+        Assert.Equal(TokenKind.Preprocessor, code.Kind);
+        Assert.Equal("`dotnet build`", Slice(Inline, code));
+
+        const string Link = "See [the docs](https://example.org) now";
+        List<TokenSpan> link = Tokens(Link, md);
+        Assert.Contains(link, t => t.Kind == TokenKind.Keyword && Slice(Link, t) == "[the docs]");
+        Assert.Contains(link, t => t.Kind == TokenKind.String && Slice(Link, t) == "(https://example.org)");
+    }
+
+    [Fact]
+    public void MarkdownFencedCodeBlocksCarryTheirStateUntilTheClosingFence()
+    {
+        SyntaxRules md = SyntaxRegistry.ForPath("a.md")!;
+
+        SyntaxState state = SyntaxTokenizer.ScanLine("```csharp", md, default);
+        Assert.Equal(SyntaxMode.FencedCode, state.Mode);
+
+        var tokens = new List<TokenSpan>();
+        state = SyntaxTokenizer.TokenizeLine("# not a heading in here", md, state, tokens);
+        Assert.Equal(SyntaxMode.FencedCode, state.Mode);
+        Assert.Equal(TokenKind.Preprocessor, Assert.Single(tokens).Kind);
+
+        state = SyntaxTokenizer.ScanLine("```", md, state);
+        Assert.Equal(SyntaxMode.None, state.Mode);
+    }
+
+    [Fact]
     public void TheRegistryKnowsTheAdvertisedExtensionsAndIgnoresTheRest()
     {
         Assert.NotNull(SyntaxRegistry.ForPath(@"C:\src\Program.cs"));

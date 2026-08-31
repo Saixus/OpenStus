@@ -196,6 +196,20 @@ public static class SyntaxRegistry
             "true", "false", "null"),
     };
 
+    private static readonly SyntaxRules Markup = new()
+    {
+        Name = "XML/HTML",
+        Family = SyntaxFamily.Markup,
+        Keywords = SyntaxRules.Words(caseSensitive: true),
+    };
+
+    private static readonly SyntaxRules Markdown = new()
+    {
+        Name = "Markdown",
+        Family = SyntaxFamily.Markdown,
+        Keywords = SyntaxRules.Words(caseSensitive: true),
+    };
+
     private static readonly Dictionary<string, SyntaxRules> Table = new(StringComparer.OrdinalIgnoreCase)
     {
         [".cs"] = CSharp,
@@ -229,6 +243,28 @@ public static class SyntaxRegistry
         [".ps1"] = PowerShell,
         [".psm1"] = PowerShell,
         [".psd1"] = PowerShell,
+
+        [".xml"] = Markup,
+        [".html"] = Markup,
+        [".htm"] = Markup,
+        [".xhtml"] = Markup,
+        [".svg"] = Markup,
+        [".xaml"] = Markup,
+        [".axaml"] = Markup,
+        [".xsd"] = Markup,
+        [".xsl"] = Markup,
+        [".xslt"] = Markup,
+        [".resx"] = Markup,
+        [".nuspec"] = Markup,
+        [".csproj"] = Markup,
+        [".vbproj"] = Markup,
+        [".fsproj"] = Markup,
+        [".props"] = Markup,
+        [".targets"] = Markup,
+        [".config"] = Markup,
+
+        [".md"] = Markdown,
+        [".markdown"] = Markdown,
 
         [".sh"] = HashConf,
         [".bash"] = HashConf,

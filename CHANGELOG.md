@@ -13,7 +13,11 @@ All notable changes to Open Commander are recorded here. The format follows
   family (sh, yaml, toml, .gitignore, ...) are recognised by extension; keywords, strings, numbers,
   comments and preprocessor directives each get their own colour, with multi-line constructs
   (block comments, C# verbatim strings, JS template literals, Python triple quotes) carried
-  correctly across lines. The five `Syntax*` colours are theme slots like every other, the feature
+  correctly across lines. XML/HTML (including csproj, xaml, svg, resx and friends) gets its own
+  markup scanner - tag names, attribute values, entities, CDATA, comments and declarations - and
+  Markdown gets headings, fenced code blocks, inline code, links, list bullets and block quotes,
+  both with their multi-line constructs (open tags, `<!-- -->`, CDATA, code fences) carried
+  across lines. The five `Syntax*` colours are theme slots like every other, the feature
   can be switched off under Options → *Syntax highlighting*, and a file type nothing recognises is
   simply drawn plain. Lines beyond 20 000 characters are coloured up to the cap so a minified
   bundle cannot stall a repaint.

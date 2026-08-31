@@ -45,7 +45,7 @@ public enum SyntaxMode : byte
     /// <summary>Ordinary code.</summary>
     None,
 
-    /// <summary>Inside a block comment (<c>/* */</c>, <c>&lt;# #&gt;</c>).</summary>
+    /// <summary>Inside a block comment (<c>/* */</c>, <c>&lt;# #&gt;</c>, <c>&lt;!-- --&gt;</c>).</summary>
     BlockComment,
 
     /// <summary>Inside a C# verbatim string (<c>@"..."</c>), where <c>""</c> is the only escape.</summary>
@@ -59,6 +59,28 @@ public enum SyntaxMode : byte
 
     /// <summary>Inside a Python <c>"""..."""</c> string.</summary>
     TripleDoubleString,
+
+    /// <summary>Inside a markup tag that has not reached its <c>&gt;</c> yet.</summary>
+    InsideTag,
+
+    /// <summary>Inside an XML <c>&lt;![CDATA[ ... ]]&gt;</c> section.</summary>
+    RawText,
+
+    /// <summary>Inside a Markdown fenced code block (<c>```</c>).</summary>
+    FencedCode,
+}
+
+/// <summary>Which of the tokenizer's scanners a language uses.</summary>
+public enum SyntaxFamily : byte
+{
+    /// <summary>The C-like scanner: comments, strings, numbers, keywords, preprocessor.</summary>
+    Code,
+
+    /// <summary>The markup scanner: tags, attributes, entities, CDATA, <c>&lt;!-- --&gt;</c>.</summary>
+    Markup,
+
+    /// <summary>The Markdown scanner: headings, fences, inline code, links, quotes.</summary>
+    Markdown,
 }
 
 /// <summary>
@@ -71,6 +93,13 @@ public sealed class SyntaxRules
 {
     /// <summary>The language name, for tests and diagnostics.</summary>
     public required string Name { get; init; }
+
+    /// <summary>
+    /// Which scanner reads the language. The switches below configure the
+    /// <see cref="SyntaxFamily.Code"/> scanner and are ignored by the other two, whose grammars
+    /// are fixed.
+    /// </summary>
+    public SyntaxFamily Family { get; init; } = SyntaxFamily.Code;
 
     /// <summary>Prefixes that start a comment running to the end of the line (<c>"//"</c>, <c>"--"</c>, <c>"#"</c>).</summary>
     public string[] LineComments { get; init; } = [];

@@ -41,6 +41,19 @@ public static class SyntaxTokenizer
         ArgumentNullException.ThrowIfNull(rules);
 
         int n = Math.Min(line.Length, MaxScanLength);
+
+        switch (rules.Family)
+        {
+            case SyntaxFamily.Markup:
+                return TokenizeMarkup(line, n, state, tokens);
+
+            case SyntaxFamily.Markdown:
+                return TokenizeMarkdown(line, n, state, tokens);
+
+            default:
+                break;
+        }
+
         int i = 0;
 
         // First finish whatever the previous line left open.
@@ -214,6 +227,347 @@ public static class SyntaxTokenizer
     /// <returns>The state this line ends in.</returns>
     public static SyntaxState ScanLine(string line, SyntaxRules rules, SyntaxState state) =>
         TokenizeLine(line, rules, state, tokens: null);
+
+    // ---------------------------------------------------------------- the markup scanner
+
+    /// <summary>
+    /// XML and HTML: tag names and their brackets are keywords, attribute values strings,
+    /// <c>&lt;!-- --&gt;</c> comments, <c>&lt;? ?&gt;</c> and <c>&lt;!DOCTYPE&gt;</c> preprocessor,
+    /// CDATA and entities coloured as string and number. Content stays plain. A tag, a comment or
+    /// a CDATA section left open at the end of the line carries its state to the next.
+    /// </summary>
+    private static SyntaxState TokenizeMarkup(string line, int n, SyntaxState state, List<TokenSpan>? tokens)
+    {
+        int i;
+        switch (state.Mode)
+        {
+            case SyntaxMode.BlockComment:
+                i = CloseSpanning(line, n, 0, "-->", TokenKind.Comment, tokens, ref state);
+                break;
+
+            case SyntaxMode.RawText:
+                i = CloseSpanning(line, n, 0, "]]>", TokenKind.String, tokens, ref state);
+                break;
+
+            case SyntaxMode.InsideTag:
+                state = SyntaxState.None;
+                i = ScanInsideTag(line, n, 0, tokens, ref state);
+                break;
+
+            default:
+                i = 0;
+                break;
+        }
+
+        if (state.Mode != SyntaxMode.None)
+        {
+            return state;
+        }
+
+        while (i < n)
+        {
+            char c = line[i];
+
+            if (c == '&')
+            {
+                int end = ScanEntity(line, n, i);
+                if (end > i)
+                {
+                    Emit(tokens, i, end - i, TokenKind.Number);
+                    i = end;
+                    continue;
+                }
+
+                i++;
+                continue;
+            }
+
+            if (c != '<')
+            {
+                i++;
+                continue;
+            }
+
+            if (Matches(line, i, n, "<!--"))
+            {
+                state = new SyntaxState(SyntaxMode.BlockComment);
+                int start = i;
+                i = CloseSpanning(line, n, i + 4, "-->", TokenKind.Comment, tokens: null, ref state);
+                Emit(tokens, start, i - start, TokenKind.Comment);
+                if (state.Mode != SyntaxMode.None)
+                {
+                    Emit(tokens, start, n - start, TokenKind.Comment);
+                    return state;
+                }
+
+                continue;
+            }
+
+            if (Matches(line, i, n, "<![CDATA["))
+            {
+                state = new SyntaxState(SyntaxMode.RawText);
+                int start = i;
+                i = CloseSpanning(line, n, i + 9, "]]>", TokenKind.String, tokens: null, ref state);
+                Emit(tokens, start, i - start, TokenKind.String);
+                if (state.Mode != SyntaxMode.None)
+                {
+                    Emit(tokens, start, n - start, TokenKind.String);
+                    return state;
+                }
+
+                continue;
+            }
+
+            if (Matches(line, i, n, "<?") || Matches(line, i, n, "<!"))
+            {
+                // Declarations: "<?xml ... ?>" and "<!DOCTYPE ...>". One line in practice; an
+                // unterminated one is coloured to the end and forgotten.
+                int close = line.IndexOf('>', Math.Min(i + 2, line.Length));
+                int end = close < 0 ? n : Math.Min(close + 1, Math.Max(n, i));
+                Emit(tokens, i, end - i, TokenKind.Preprocessor);
+                i = end;
+                continue;
+            }
+
+            if (i + 1 < n && (char.IsLetter(line[i + 1]) || line[i + 1] == '/'))
+            {
+                int start = i;
+                i += line[i + 1] == '/' ? 2 : 1;
+                while (i < n && (char.IsLetterOrDigit(line[i]) || line[i] is ':' or '-' or '.' or '_'))
+                {
+                    i++;
+                }
+
+                Emit(tokens, start, i - start, TokenKind.Keyword);
+                i = ScanInsideTag(line, n, i, tokens, ref state);
+                if (state.Mode != SyntaxMode.None)
+                {
+                    return state;
+                }
+
+                continue;
+            }
+
+            i++;
+        }
+
+        return SyntaxState.None;
+    }
+
+    /// <summary>
+    /// Scans the inside of a tag - attribute values as strings, the closing bracket as part of the
+    /// tag - and marks the state <see cref="SyntaxMode.InsideTag"/> when the line ends first.
+    /// </summary>
+    private static int ScanInsideTag(string line, int n, int from, List<TokenSpan>? tokens, ref SyntaxState state)
+    {
+        int i = from;
+        while (i < n)
+        {
+            char c = line[i];
+
+            if (c == '>')
+            {
+                Emit(tokens, i, 1, TokenKind.Keyword);
+                return i + 1;
+            }
+
+            if (c == '/' && i + 1 < n && line[i + 1] == '>')
+            {
+                Emit(tokens, i, 2, TokenKind.Keyword);
+                return i + 2;
+            }
+
+            if (c is '"' or '\'')
+            {
+                // XML attribute values have no escapes at all; an unterminated one is coloured to
+                // the end of the line and the tag stays open.
+                int close = line.IndexOf(c, Math.Min(i + 1, line.Length));
+                int end = close < 0 ? n : Math.Min(close + 1, Math.Max(n, i));
+                Emit(tokens, i, end - i, TokenKind.String);
+                i = end;
+                continue;
+            }
+
+            i++;
+        }
+
+        state = new SyntaxState(SyntaxMode.InsideTag);
+        return n;
+    }
+
+    /// <summary>An <c>&amp;name;</c> or <c>&amp;#160;</c> entity, or nothing.</summary>
+    /// <returns>The index just past the <c>;</c>, or <paramref name="at"/> when this is no entity.</returns>
+    private static int ScanEntity(string line, int n, int at)
+    {
+        int i = at + 1;
+        int limit = Math.Min(n, at + 12); // entities are short; a lone '&' is just text
+        if (i < limit && line[i] == '#')
+        {
+            i++;
+        }
+
+        while (i < limit && char.IsLetterOrDigit(line[i]))
+        {
+            i++;
+        }
+
+        return i > at + 1 && i < n && line[i] == ';' ? i + 1 : at;
+    }
+
+    /// <summary>
+    /// Finishes a construct that may span lines: emits the covered span, clears the state when the
+    /// closing marker is found - searching past the span cap so the state stays honest - and
+    /// leaves the state alone when it is not.
+    /// </summary>
+    private static int CloseSpanning(string line, int n, int from, string close, TokenKind kind, List<TokenSpan>? tokens, ref SyntaxState state)
+    {
+        int at = line.IndexOf(close, Math.Min(from, line.Length), StringComparison.Ordinal);
+        if (at < 0)
+        {
+            Emit(tokens, 0, n, kind);
+            return n; // still open
+        }
+
+        state = SyntaxState.None;
+        int end = Math.Min(at + close.Length, Math.Max(n, from));
+        Emit(tokens, 0, end, kind);
+        return end;
+    }
+
+    // ---------------------------------------------------------------- the Markdown scanner
+
+    /// <summary>
+    /// Markdown, kept to what reads well in five colours: headings are keywords, fenced blocks
+    /// and inline code preprocessor-green, block quotes comment-grey, link text keyword and link
+    /// target string, list bullets keywords, HTML comments comments.
+    /// </summary>
+    private static SyntaxState TokenizeMarkdown(string line, int n, SyntaxState state, List<TokenSpan>? tokens)
+    {
+        if (state.Mode == SyntaxMode.BlockComment)
+        {
+            int after = CloseSpanning(line, n, 0, "-->", TokenKind.Comment, tokens, ref state);
+            if (state.Mode != SyntaxMode.None)
+            {
+                return state;
+            }
+
+            return TokenizeMarkdownFrom(line, n, after, tokens);
+        }
+
+        if (state.Mode == SyntaxMode.FencedCode)
+        {
+            Emit(tokens, 0, n, TokenKind.Preprocessor);
+            return IsFenceLine(line, n) ? SyntaxState.None : state;
+        }
+
+        if (IsFenceLine(line, n))
+        {
+            Emit(tokens, 0, n, TokenKind.Preprocessor);
+            return new SyntaxState(SyntaxMode.FencedCode);
+        }
+
+        int i = 0;
+        while (i < n && line[i] == ' ' && i < 3)
+        {
+            i++;
+        }
+
+        if (i < n && line[i] == '#')
+        {
+            Emit(tokens, 0, n, TokenKind.Keyword); // a heading is one white line
+            return SyntaxState.None;
+        }
+
+        if (i < n && line[i] == '>')
+        {
+            Emit(tokens, i, n - i, TokenKind.Comment); // a block quote recedes, like Far's Colorer
+            return SyntaxState.None;
+        }
+
+        if (i + 1 < n && line[i] is '-' or '*' or '+' && line[i + 1] == ' ')
+        {
+            Emit(tokens, i, 1, TokenKind.Keyword); // the list bullet
+            i += 2;
+        }
+
+        return TokenizeMarkdownFrom(line, n, i, tokens);
+    }
+
+    private static SyntaxState TokenizeMarkdownFrom(string line, int n, int from, List<TokenSpan>? tokens)
+    {
+        int i = from;
+        while (i < n)
+        {
+            char c = line[i];
+
+            if (c == '`')
+            {
+                int close = line.IndexOf('`', Math.Min(i + 1, line.Length));
+                if (close < 0)
+                {
+                    i++;
+                    continue; // a lone backtick is just a backtick
+                }
+
+                int end = Math.Min(close + 1, Math.Max(n, i));
+                Emit(tokens, i, end - i, TokenKind.Preprocessor);
+                i = end;
+                continue;
+            }
+
+            if (c == '[')
+            {
+                // [text](target): the text keyword-white, the target string-yellow.
+                int textClose = line.IndexOf(']', Math.Min(i + 1, line.Length));
+                if (textClose >= 0 && textClose + 1 < line.Length && line[textClose + 1] == '(')
+                {
+                    int targetClose = line.IndexOf(')', textClose + 2);
+                    if (targetClose >= 0)
+                    {
+                        Emit(tokens, i, Math.Min(textClose + 1, n) - i, TokenKind.Keyword);
+                        int targetStart = Math.Min(textClose + 1, n);
+                        int targetEnd = Math.Min(targetClose + 1, Math.Max(n, i));
+                        Emit(tokens, targetStart, targetEnd - targetStart, TokenKind.String);
+                        i = targetEnd;
+                        continue;
+                    }
+                }
+
+                i++;
+                continue;
+            }
+
+            if (c == '<' && Matches(line, i, n, "<!--"))
+            {
+                var state = new SyntaxState(SyntaxMode.BlockComment);
+                int start = i;
+                i = CloseSpanning(line, n, i + 4, "-->", TokenKind.Comment, tokens: null, ref state);
+                Emit(tokens, start, (state.Mode == SyntaxMode.None ? i : n) - start, TokenKind.Comment);
+                if (state.Mode != SyntaxMode.None)
+                {
+                    return state;
+                }
+
+                continue;
+            }
+
+            i++;
+        }
+
+        return SyntaxState.None;
+    }
+
+    /// <summary>A code-fence line: up to three spaces, then <c>```</c> or <c>~~~</c>.</summary>
+    private static bool IsFenceLine(string line, int n)
+    {
+        int i = 0;
+        while (i < n && line[i] == ' ' && i < 3)
+        {
+            i++;
+        }
+
+        return Matches(line, i, n, "```") || Matches(line, i, n, "~~~");
+    }
 
     // ---------------------------------------------------------------- multi-line closers
 
