@@ -284,6 +284,23 @@ public sealed class Theme
     /// <summary>Editor scroll bar.</summary>
     public CellStyle EditorScroll { get; set; }
 
+    // ---- Syntax colouring (editor and viewer) ---------------------------------------------
+
+    /// <summary>A language keyword, or a JSON object key.</summary>
+    public CellStyle SyntaxKeyword { get; set; }
+
+    /// <summary>A string or character literal.</summary>
+    public CellStyle SyntaxString { get; set; }
+
+    /// <summary>A numeric literal.</summary>
+    public CellStyle SyntaxNumber { get; set; }
+
+    /// <summary>A comment.</summary>
+    public CellStyle SyntaxComment { get; set; }
+
+    /// <summary>A preprocessor directive.</summary>
+    public CellStyle SyntaxPreprocessor { get; set; }
+
     // ---- Progress --------------------------------------------------------------------------------
 
     /// <summary>Filled part of a progress bar.</summary>
@@ -486,6 +503,16 @@ public sealed class Theme
         t.EditorStatus = new CellStyle(black, bCyan);            // COL_EDITORSTATUS         :121
         t.EditorScroll = new CellStyle(lightCyan, bBlue);        // COL_EDITORSCROLLBAR      :193
 
+        // ---- Syntax colouring. No Far palette entries: Far gets these from the Colorer plugin,
+        // whose stock scheme on the blue editor this mirrors - grey comments, yellow strings,
+        // white keywords. Both surfaces (editor and viewer) share the blue background, so one set
+        // of slots serves them both.
+        t.SyntaxKeyword = new CellStyle(white, bBlue);
+        t.SyntaxString = new CellStyle(yellow, bBlue);
+        t.SyntaxNumber = new CellStyle(ConsoleColor.Magenta, bBlue);
+        t.SyntaxComment = new CellStyle(darkGray, bBlue);
+        t.SyntaxPreprocessor = new CellStyle(lightGreen, bBlue);
+
         // ---- Progress. No Far counterpart: Far draws copy progress with dialog colours. ------
         t.ProgressBar = new CellStyle(lightCyan, bBlue);         // no Far palette entry
         t.ProgressBarEmpty = new CellStyle(darkGray, bBlue);     // no Far palette entry
@@ -580,6 +607,12 @@ public sealed class Theme
         new("EditorSelected", t => t.EditorSelected, (t, v) => t.EditorSelected = v),
         new("EditorStatus", t => t.EditorStatus, (t, v) => t.EditorStatus = v),
         new("EditorScroll", t => t.EditorScroll, (t, v) => t.EditorScroll = v),
+
+        new("SyntaxKeyword", t => t.SyntaxKeyword, (t, v) => t.SyntaxKeyword = v),
+        new("SyntaxString", t => t.SyntaxString, (t, v) => t.SyntaxString = v),
+        new("SyntaxNumber", t => t.SyntaxNumber, (t, v) => t.SyntaxNumber = v),
+        new("SyntaxComment", t => t.SyntaxComment, (t, v) => t.SyntaxComment = v),
+        new("SyntaxPreprocessor", t => t.SyntaxPreprocessor, (t, v) => t.SyntaxPreprocessor = v),
 
         new("ProgressBar", t => t.ProgressBar, (t, v) => t.ProgressBar = v),
         new("ProgressBarEmpty", t => t.ProgressBarEmpty, (t, v) => t.ProgressBarEmpty = v),

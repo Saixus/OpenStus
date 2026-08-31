@@ -3,6 +3,7 @@ using OpenCommander.Core;
 using OpenCommander.Input;
 using OpenCommander.Rendering;
 using OpenCommander.Text;
+using OpenCommander.Text.Syntax;
 using OpenCommander.Theming;
 
 namespace OpenCommander.Editor;
@@ -43,6 +44,13 @@ public sealed class FileEditor : IScreenComponent
     private string _lastSearch = string.Empty;
     private string _lastReplace = string.Empty;
     private bool _closed;
+
+    // Syntax colouring: the rules for FilePath's extension, the per-line entry states, and one
+    // reusable span list so a repaint allocates nothing.
+    private SyntaxRules? _syntaxRules;
+    private string? _syntaxPath;
+    private LineStateCache _lineStates = new();
+    private readonly List<TokenSpan> _syntaxTokens = [];
 
     /// <summary>
     /// Opens a file for editing, creating an empty document when it does not exist.
@@ -131,6 +139,12 @@ public sealed class FileEditor : IScreenComponent
 
     /// <summary>Draw a scroll bar down the right edge when the document does not fit.</summary>
     public bool ShowScrollBar { get; set; } = true;
+
+    /// <summary>
+    /// Colour the text by the file type's syntax (C#, JSON, SQL, ...). On by default; a file whose
+    /// extension no rules cover is simply drawn plain.
+    /// </summary>
+    public bool SyntaxHighlight { get; set; } = true;
 
     /// <summary>The screen column the hardware caret should be placed at.</summary>
     public int CursorScreenX { get; private set; }
@@ -882,6 +896,7 @@ public sealed class FileEditor : IScreenComponent
             : string.Empty;
 
         buffer.WriteFixed(_area.X, y, width, slice, _theme.EditorText);
+        DrawSyntax(buffer, y, index, raw, width);
 
         if (!_cursor.SelectionOnLine(index, raw.Length, out int from, out int to))
         {
@@ -899,6 +914,88 @@ public sealed class FileEditor : IScreenComponent
             buffer.FillStyle(new Rect(_area.X + x0, y, x1 - x0, 1), _theme.EditorSelected);
         }
     }
+
+    /// <summary>
+    /// Recolours the syntax spans of one already drawn line. The overlay changes styles only -
+    /// glyphs stay where <see cref="DrawLine"/> put them - and runs before the selection overlay,
+    /// so a selection covers the colouring exactly as it covers plain text.
+    /// </summary>
+    private void DrawSyntax(ScreenBuffer buffer, int y, int index, string raw, int width)
+    {
+        SyntaxRules? rules = CurrentSyntaxRules();
+        if (rules is null)
+        {
+            return;
+        }
+
+        _syntaxTokens.Clear();
+        SyntaxState entry = _lineStates.EntryState(_buffer, rules, index);
+        SyntaxTokenizer.TokenizeLine(raw, rules, entry, _syntaxTokens);
+
+        // Token spans are in character columns; the screen is in display columns. The spans come
+        // out in ascending order, so one walk over the line maps them all - a token-dense
+        // minified line must not pay a from-zero column scan per token.
+        int stop = Math.Max(1, _buffer.TabSize);
+        int mappedChar = 0;
+        int mappedDisplay = 0;
+
+        int Advance(int toChar)
+        {
+            while (mappedChar < toChar && mappedChar < raw.Length)
+            {
+                mappedDisplay += raw[mappedChar] == '\t' ? stop - (mappedDisplay % stop) : 1;
+                mappedChar++;
+            }
+
+            return mappedDisplay;
+        }
+
+        foreach (TokenSpan token in _syntaxTokens)
+        {
+            int displayFrom = Advance(token.Start);
+            if (displayFrom >= _leftColumn + width)
+            {
+                break; // this and every later token is scrolled off the right edge
+            }
+
+            int displayTo = Advance(token.Start + token.Length);
+
+            int x0 = Math.Max(0, displayFrom - _leftColumn);
+            int x1 = Math.Min(width, displayTo - _leftColumn);
+            if (x1 > x0)
+            {
+                buffer.FillStyle(new Rect(_area.X + x0, y, x1 - x0, 1), SyntaxStyle(token.Kind));
+            }
+        }
+    }
+
+    /// <summary>The rules for the file being edited, or <see langword="null"/> when off or unknown.</summary>
+    private SyntaxRules? CurrentSyntaxRules()
+    {
+        if (!SyntaxHighlight)
+        {
+            return null;
+        }
+
+        if (!string.Equals(_syntaxPath, FilePath, StringComparison.Ordinal))
+        {
+            _syntaxPath = FilePath;
+            _syntaxRules = SyntaxRegistry.ForPath(FilePath);
+            _lineStates = new LineStateCache();
+        }
+
+        return _syntaxRules;
+    }
+
+    private CellStyle SyntaxStyle(TokenKind kind) => kind switch
+    {
+        TokenKind.Keyword => _theme.SyntaxKeyword,
+        TokenKind.String => _theme.SyntaxString,
+        TokenKind.Number => _theme.SyntaxNumber,
+        TokenKind.Comment => _theme.SyntaxComment,
+        TokenKind.Preprocessor => _theme.SyntaxPreprocessor,
+        _ => _theme.EditorText,
+    };
 
     private void DrawScrollBar(ScreenBuffer buffer, int rows)
     {

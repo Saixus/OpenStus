@@ -48,6 +48,16 @@ public sealed class FileViewer : IScreenComponent, IDisposable
     private bool _closed;
     private bool _disposed;
 
+    // Syntax colouring. The viewer never holds the whole file, so there is no per-line state
+    // array; instead every line drawn records the state its successor starts in, keyed by byte
+    // offset. Scrolling sequentially therefore chains states exactly, and a random jump falls
+    // back to "no construct open" - a block comment spanning the jump target mis-colours until
+    // its closing marker, which is the honest price of never scanning gigabytes.
+    private readonly Dictionary<long, Text.Syntax.SyntaxState> _syntaxStates = [];
+    private readonly List<Text.Syntax.TokenSpan> _syntaxTokens = [];
+    private Text.Syntax.SyntaxRules? _syntaxRules;
+    private bool _syntaxResolved;
+
     /// <summary>
     /// Opens a file for viewing.
     /// </summary>
@@ -134,6 +144,12 @@ public sealed class FileViewer : IScreenComponent, IDisposable
 
     /// <summary>Search case insensitively. On by default, matching Far.</summary>
     public bool IgnoreCase { get; set; } = true;
+
+    /// <summary>
+    /// Colour the text by the file type's syntax (C#, JSON, SQL, ...). On by default; a file
+    /// whose extension no rules cover - and hex mode - is drawn plain.
+    /// </summary>
+    public bool SyntaxHighlight { get; set; } = true;
 
     /// <summary>How many columns a tab character advances to. Far's viewer uses eight.</summary>
     public int TabSize { get; set; } = 8;
@@ -622,9 +638,22 @@ public sealed class FileViewer : IScreenComponent, IDisposable
         int drawn = 0;
         bool overflowRight = false;
 
+        Text.Syntax.SyntaxRules? rules = CurrentSyntaxRules();
+        Text.Syntax.SyntaxState state = rules is not null && _syntaxStates.TryGetValue(offset, out var seeded)
+            ? seeded
+            : Text.Syntax.SyntaxState.None;
+
         while (drawn < rows && offset <= _model.Length)
         {
             string line = Expand(_model.ReadLine(offset, out long next), TabSize);
+
+            _syntaxTokens.Clear();
+            if (rules is not null)
+            {
+                // Tokenizing the expanded line means the spans are already in display columns.
+                state = Text.Syntax.SyntaxTokenizer.TokenizeLine(line, rules, state, _syntaxTokens);
+                RememberSyntaxState(next, state);
+            }
 
             if (Wrap)
             {
@@ -639,6 +668,8 @@ public sealed class FileViewer : IScreenComponent, IDisposable
                         width,
                         take > 0 ? line.Substring(start, take) : string.Empty,
                         _theme.ViewerText);
+
+                    DrawSyntaxSpans(buffer, top + drawn, windowStart: start, width);
                 }
 
                 sub = 0;
@@ -651,6 +682,7 @@ public sealed class FileViewer : IScreenComponent, IDisposable
                     : string.Empty;
 
                 buffer.WriteFixed(_area.X, top + drawn, width, slice, _theme.ViewerText);
+                DrawSyntaxSpans(buffer, top + drawn, windowStart: _hScroll, width);
                 drawn++;
             }
 
@@ -688,6 +720,63 @@ public sealed class FileViewer : IScreenComponent, IDisposable
             }
         }
     }
+
+    /// <summary>
+    /// Recolours the syntax spans of one drawn body row: the spans in <see cref="_syntaxTokens"/>
+    /// are in whole-line display columns, and the row shows the window
+    /// <c>[windowStart, windowStart + width)</c> of that line.
+    /// </summary>
+    private void DrawSyntaxSpans(ScreenBuffer buffer, int y, int windowStart, int width)
+    {
+        foreach (Text.Syntax.TokenSpan token in _syntaxTokens)
+        {
+            int x0 = Math.Max(0, token.Start - windowStart);
+            int x1 = Math.Min(width, token.Start + token.Length - windowStart);
+            if (x1 > x0)
+            {
+                buffer.FillStyle(new Rect(_area.X + x0, y, x1 - x0, 1), SyntaxStyle(token.Kind));
+            }
+        }
+    }
+
+    /// <summary>The rules for the file being viewed, or <see langword="null"/> when off or unknown.</summary>
+    private Text.Syntax.SyntaxRules? CurrentSyntaxRules()
+    {
+        if (!SyntaxHighlight)
+        {
+            return null;
+        }
+
+        if (!_syntaxResolved)
+        {
+            _syntaxResolved = true;
+            _syntaxRules = Text.Syntax.SyntaxRegistry.ForPath(FilePath);
+        }
+
+        return _syntaxRules;
+    }
+
+    private void RememberSyntaxState(long offset, Text.Syntax.SyntaxState state)
+    {
+        // A bounded memory of line-start states; past the cap the map simply starts over, at the
+        // cost of a fallback to "nothing open" on the next backwards jump.
+        if (_syntaxStates.Count > 65536)
+        {
+            _syntaxStates.Clear();
+        }
+
+        _syntaxStates[offset] = state;
+    }
+
+    private CellStyle SyntaxStyle(Text.Syntax.TokenKind kind) => kind switch
+    {
+        Text.Syntax.TokenKind.Keyword => _theme.SyntaxKeyword,
+        Text.Syntax.TokenKind.String => _theme.SyntaxString,
+        Text.Syntax.TokenKind.Number => _theme.SyntaxNumber,
+        Text.Syntax.TokenKind.Comment => _theme.SyntaxComment,
+        Text.Syntax.TokenKind.Preprocessor => _theme.SyntaxPreprocessor,
+        _ => _theme.ViewerText,
+    };
 
     private void DrawHex(ScreenBuffer buffer, int top, int rows)
     {

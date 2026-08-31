@@ -165,6 +165,48 @@ public sealed class TextBuffer
     /// <summary>The number of lines; always at least one.</summary>
     public int LineCount => _lines.Count;
 
+    /// <summary>
+    /// Bumped on every text change - undo and redo included - so a consumer caching anything
+    /// derived from the lines (the syntax highlighter's per-line states) can tell at a glance
+    /// whether its cache is stale.
+    /// </summary>
+    public int Version { get; private set; }
+
+    /// <summary>The first line the most recent change touched.</summary>
+    public int LastChangeStart { get; private set; }
+
+    /// <summary>
+    /// The first line touched by any change since <paramref name="sinceVersion"/>, so a cache can
+    /// invalidate exactly even when several splices landed between its looks - one keystroke over
+    /// a selection is two splices, indenting a block is one per line, and the event loop drains
+    /// many keystrokes per frame. The recent change starts live in a ring; a version older than
+    /// the ring reaches answers zero, the safe "everything may have moved".
+    /// </summary>
+    /// <param name="sinceVersion">The version the caller last saw.</param>
+    /// <returns>The lowest changed line since then, or <c>0</c> when it is unknowable.</returns>
+    public int FirstChangeSince(int sinceVersion)
+    {
+        if (sinceVersion >= Version)
+        {
+            return int.MaxValue; // nothing changed
+        }
+
+        if (Version - sinceVersion > _changeStarts.Length)
+        {
+            return 0;
+        }
+
+        int min = int.MaxValue;
+        for (int v = sinceVersion + 1; v <= Version; v++)
+        {
+            min = Math.Min(min, _changeStarts[v % _changeStarts.Length]);
+        }
+
+        return min;
+    }
+
+    private readonly int[] _changeStarts = new int[1024];
+
     /// <summary>The text of one line, without its terminator. Out-of-range indices read as empty.</summary>
     /// <param name="index">Zero based line index.</param>
     public string this[int index] => GetLine(index);
@@ -1298,6 +1340,8 @@ public sealed class TextBuffer
         {
             CountEnding(splice.After[i].Ending, 1);
         }
+
+        RecordChange(splice.Start);
     }
 
     private void ApplyBackward(Splice splice)
@@ -1314,6 +1358,15 @@ public sealed class TextBuffer
         {
             CountEnding(splice.Before[i].Ending, 1);
         }
+
+        RecordChange(splice.Start);
+    }
+
+    private void RecordChange(int firstLine)
+    {
+        Version++;
+        LastChangeStart = firstLine;
+        _changeStarts[Version % _changeStarts.Length] = firstLine;
     }
 
     private void CountEnding(string ending, int delta)

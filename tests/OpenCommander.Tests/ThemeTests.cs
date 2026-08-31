@@ -192,8 +192,8 @@ public class ThemeDefaultsTests
     [Fact]
     public void EveryContractMemberIsAddressableAndTheTableIsComplete()
     {
-        Assert.Equal(75, Theme.Slots.Count);
-        Assert.Equal(75, Theme.Slots.Select(s => s.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.Equal(80, Theme.Slots.Count);
+        Assert.Equal(80, Theme.Slots.Select(s => s.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count());
 
         var t = Theme.FarDefault();
         foreach (var slot in Theme.Slots)

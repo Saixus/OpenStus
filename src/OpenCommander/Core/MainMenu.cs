@@ -161,6 +161,10 @@ public static class MainMenu
             {
                 Checked = s.ShowClock,
             },
+            new MenuItem("Synta&x highlighting", null, () => app.ToggleSetting(v => s.SyntaxHighlight = v, s.SyntaxHighlight, reload: false))
+            {
+                Checked = s.SyntaxHighlight,
+            },
             MenuItem.Separator(),
             new MenuItem("Confirm de&lete", null, () => app.ToggleSetting(v => s.ConfirmDelete = v, s.ConfirmDelete, reload: false))
             {

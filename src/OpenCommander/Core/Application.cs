@@ -1070,6 +1070,8 @@ public sealed class Application : IAppContext, IDisposable
             return;
         }
 
+        viewer.SyntaxHighlight = Settings.SyntaxHighlight;
+
         using (viewer)
         {
             RunModal(viewer);
@@ -1099,6 +1101,7 @@ public sealed class Application : IAppContext, IDisposable
             return;
         }
 
+        editor.SyntaxHighlight = Settings.SyntaxHighlight;
         RunModal(editor);
         RefreshBothPanels();
     }
@@ -1128,6 +1131,7 @@ public sealed class Application : IAppContext, IDisposable
             return; // the editor has already reported why it would not open
         }
 
+        editor.SyntaxHighlight = Settings.SyntaxHighlight;
         RunModal(editor);
         RefreshBothPanels();
     }

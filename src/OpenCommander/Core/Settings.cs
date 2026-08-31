@@ -107,6 +107,9 @@ public sealed class Settings
     /// <summary>Draw the command line above the key bar.</summary>
     public bool ShowCommandLine { get; set; } = true;
 
+    /// <summary>Colour the viewer and editor text by file type (C#, JSON, SQL, ...).</summary>
+    public bool SyntaxHighlight { get; set; } = true;
+
     /// <summary>Ask before deleting.</summary>
     public bool ConfirmDelete { get; set; } = true;
 

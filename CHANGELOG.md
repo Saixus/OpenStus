@@ -8,6 +8,16 @@ All notable changes to Open Commander are recorded here. The format follows
 
 ### Added
 
+- **Syntax highlighting in the viewer and editor.** C#, JavaScript/TypeScript, JSON (with keys
+  coloured separately), SQL, C/C++, Java, Python, PowerShell and the `#`-commented shell/config
+  family (sh, yaml, toml, .gitignore, ...) are recognised by extension; keywords, strings, numbers,
+  comments and preprocessor directives each get their own colour, with multi-line constructs
+  (block comments, C# verbatim strings, JS template literals, Python triple quotes) carried
+  correctly across lines. The five `Syntax*` colours are theme slots like every other, the feature
+  can be switched off under Options → *Syntax highlighting*, and a file type nothing recognises is
+  simply drawn plain. Lines beyond 20 000 characters are coloured up to the cap so a minified
+  bundle cannot stall a repaint.
+
 - **24-bit colour.** The renderer can write literal RGB (`38;2;r;g;b` / `48;2;r;g;b`) resolved
   through a 16-entry palette instead of naming the terminal's own colour slots, so the classic look
   survives whatever scheme the terminal is themed with. The default palette is the Windows console
