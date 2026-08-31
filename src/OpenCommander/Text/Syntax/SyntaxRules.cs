@@ -30,10 +30,14 @@ public readonly record struct TokenSpan(int Start, int Length, TokenKind Kind);
 
 /// <summary>
 /// Which multi-line construct is open when a line ends - the whole state the tokenizer carries
-/// from one line to the next. A struct of one byte, so caching one per line costs nothing.
+/// from one line to the next. Two bytes, so caching one per line costs nothing.
 /// </summary>
 /// <param name="Mode">The open construct.</param>
-public readonly record struct SyntaxState(SyntaxMode Mode)
+/// <param name="Arg">
+/// A small payload some modes carry - CSV's open quoted field remembers which column it is in,
+/// so the colour cycle survives a field that spans lines. Zero for every other mode.
+/// </param>
+public readonly record struct SyntaxState(SyntaxMode Mode, byte Arg = 0)
 {
     /// <summary>The state outside any multi-line construct; the entry state of line zero.</summary>
     public static SyntaxState None => default;
@@ -68,6 +72,15 @@ public enum SyntaxMode : byte
 
     /// <summary>Inside a Markdown fenced code block (<c>```</c>).</summary>
     FencedCode,
+
+    /// <summary>Past a CSV file's header row.</summary>
+    CsvBody,
+
+    /// <summary>Inside a quoted CSV field of the header row that spans lines.</summary>
+    CsvQuotedHeader,
+
+    /// <summary>Inside a quoted CSV field of a body row that spans lines.</summary>
+    CsvQuotedBody,
 }
 
 /// <summary>Which of the tokenizer's scanners a language uses.</summary>
@@ -81,6 +94,9 @@ public enum SyntaxFamily : byte
 
     /// <summary>The Markdown scanner: headings, fences, inline code, links, quotes.</summary>
     Markdown,
+
+    /// <summary>The CSV scanner: a white header row, then columns cycling through the colours.</summary>
+    Csv,
 }
 
 /// <summary>

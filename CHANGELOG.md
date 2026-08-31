@@ -17,7 +17,10 @@ All notable changes to Open Commander are recorded here. The format follows
   markup scanner - tag names, attribute values, entities, CDATA, comments and declarations - and
   Markdown gets headings, fenced code blocks, inline code, links, list bullets and block quotes,
   both with their multi-line constructs (open tags, `<!-- -->`, CDATA, code fences) carried
-  across lines. The five `Syntax*` colours are theme slots like every other, the feature
+  across lines. CSV and TSV files draw the header row white and cycle the body columns through
+  the palette so neighbouring columns are told apart at a glance; quoted fields keep their
+  separators, doubled quotes, and even line breaks - an open field carries its colour to the
+  next line. The five `Syntax*` colours are theme slots like every other, the feature
   can be switched off under Options → *Syntax highlighting*, and a file type nothing recognises is
   simply drawn plain. Lines beyond 20 000 characters are coloured up to the cap so a minified
   bundle cannot stall a repaint.

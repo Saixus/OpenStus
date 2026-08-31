@@ -349,6 +349,81 @@ public class SyntaxTokenizerTests
     }
 
     [Fact]
+    public void CsvHeaderIsWhiteAndBodyColumnsCycle()
+    {
+        SyntaxRules csv = SyntaxRegistry.ForPath("a.csv")!;
+
+        // The file's first row is the header: every field keyword-white.
+        var tokens = new List<TokenSpan>();
+        const string Header = "id,name,price";
+        SyntaxState state = SyntaxTokenizer.TokenizeLine(Header, csv, default, tokens);
+        Assert.Equal(SyntaxMode.CsvBody, state.Mode);
+        Assert.Equal(3, tokens.Count);
+        Assert.All(tokens, t => Assert.Equal(TokenKind.Keyword, t.Kind));
+
+        // Body columns cycle: 0 plain (no span), then String, Number, Preprocessor, plain again.
+        tokens.Clear();
+        const string Body = "7,widget,9.99,blue,extra";
+        state = SyntaxTokenizer.TokenizeLine(Body, csv, state, tokens);
+        Assert.Equal(SyntaxMode.CsvBody, state.Mode);
+        Assert.Collection(
+            tokens,
+            t => { Assert.Equal(TokenKind.String, t.Kind); Assert.Equal("widget", Slice(Body, t)); },
+            t => { Assert.Equal(TokenKind.Number, t.Kind); Assert.Equal("9.99", Slice(Body, t)); },
+            t => { Assert.Equal(TokenKind.Preprocessor, t.Kind); Assert.Equal("blue", Slice(Body, t)); });
+    }
+
+    [Fact]
+    public void AQuotedCsvFieldKeepsItsSeparatorsAndItsDoubledQuotes()
+    {
+        SyntaxRules csv = SyntaxRegistry.ForPath("a.csv")!;
+        var tokens = new List<TokenSpan>();
+
+        SyntaxState body = new(SyntaxMode.CsvBody);
+        const string Line = "a,\"x, \"\"y\"\", z\",tail";
+        SyntaxTokenizer.TokenizeLine(Line, csv, body, tokens);
+
+        // The whole quoted blob is one column-1 field despite its commas and inner quotes.
+        TokenSpan quoted = Assert.Single(tokens, t => t.Kind == TokenKind.String);
+        Assert.Equal("\"x, \"\"y\"\", z\"", Slice(Line, quoted));
+
+        // "tail" is column 2.
+        Assert.Contains(tokens, t => t.Kind == TokenKind.Number && Slice(Line, t) == "tail");
+    }
+
+    [Fact]
+    public void AQuotedCsvFieldSpanningLinesCarriesItsColumnInTheState()
+    {
+        SyntaxRules csv = SyntaxRegistry.ForPath("a.csv")!;
+
+        SyntaxState state = SyntaxTokenizer.TokenizeLine("h1,h2", csv, default, tokens: null);
+        state = SyntaxTokenizer.TokenizeLine("a,\"multi", csv, state, tokens: null);
+        Assert.Equal(SyntaxMode.CsvQuotedBody, state.Mode);
+        Assert.Equal(1, state.Arg);
+
+        // The continuation line finishes the field in the same colour, then moves on.
+        var tokens = new List<TokenSpan>();
+        const string Rest = "line\",9";
+        state = SyntaxTokenizer.TokenizeLine(Rest, csv, state, tokens);
+        Assert.Equal(SyntaxMode.CsvBody, state.Mode);
+        Assert.Contains(tokens, t => t.Kind == TokenKind.String && Slice(Rest, t) == "line\"");
+        Assert.Contains(tokens, t => t.Kind == TokenKind.Number && Slice(Rest, t) == "9");
+    }
+
+    [Fact]
+    public void TabsAndSemicolonsSeparateCsvColumnsToo()
+    {
+        SyntaxRules tsv = SyntaxRegistry.ForPath("a.tsv")!;
+        var tokens = new List<TokenSpan>();
+
+        const string Line = "a\tb;c";
+        SyntaxTokenizer.TokenizeLine(Line, tsv, new SyntaxState(SyntaxMode.CsvBody), tokens);
+
+        Assert.Contains(tokens, t => t.Kind == TokenKind.String && Slice(Line, t) == "b");
+        Assert.Contains(tokens, t => t.Kind == TokenKind.Number && Slice(Line, t) == "c");
+    }
+
+    [Fact]
     public void TheRegistryKnowsTheAdvertisedExtensionsAndIgnoresTheRest()
     {
         Assert.NotNull(SyntaxRegistry.ForPath(@"C:\src\Program.cs"));

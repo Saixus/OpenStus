@@ -210,6 +210,13 @@ public static class SyntaxRegistry
         Keywords = SyntaxRules.Words(caseSensitive: true),
     };
 
+    private static readonly SyntaxRules Csv = new()
+    {
+        Name = "CSV",
+        Family = SyntaxFamily.Csv,
+        Keywords = SyntaxRules.Words(caseSensitive: true),
+    };
+
     private static readonly Dictionary<string, SyntaxRules> Table = new(StringComparer.OrdinalIgnoreCase)
     {
         [".cs"] = CSharp,
@@ -265,6 +272,9 @@ public static class SyntaxRegistry
 
         [".md"] = Markdown,
         [".markdown"] = Markdown,
+
+        [".csv"] = Csv,
+        [".tsv"] = Csv,
 
         [".sh"] = HashConf,
         [".bash"] = HashConf,

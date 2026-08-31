@@ -50,6 +50,9 @@ public static class SyntaxTokenizer
             case SyntaxFamily.Markdown:
                 return TokenizeMarkdown(line, n, state, tokens);
 
+            case SyntaxFamily.Csv:
+                return TokenizeCsv(line, n, state, tokens);
+
             default:
                 break;
         }
@@ -432,6 +435,131 @@ public static class SyntaxTokenizer
         int end = Math.Min(at + close.Length, Math.Max(n, from));
         Emit(tokens, 0, end, kind);
         return end;
+    }
+
+    // ---------------------------------------------------------------- the CSV scanner
+
+    /// <summary>
+    /// CSV and TSV: the header row - the file's first - is keyword-white, and the body's columns
+    /// cycle through the palette so neighbouring columns are told apart at a glance. Commas,
+    /// semicolons and tabs all separate; a quoted field may contain separators, doubled quotes,
+    /// and line breaks, in which case the open field - and its place in the colour cycle -
+    /// carries to the next line.
+    /// </summary>
+    private static SyntaxState TokenizeCsv(string line, int n, SyntaxState state, List<TokenSpan>? tokens)
+    {
+        bool header = state.Mode is SyntaxMode.None or SyntaxMode.CsvQuotedHeader;
+        int column = state.Arg;
+        int i = 0;
+
+        // Finish a quoted field the previous line left open.
+        if (state.Mode is SyntaxMode.CsvQuotedHeader or SyntaxMode.CsvQuotedBody)
+        {
+            int close = FindCsvQuoteEnd(line, 0);
+            TokenKind resumed = CsvKind(header, column);
+            if (close < 0)
+            {
+                EmitCsv(tokens, 0, n, resumed);
+                return state; // still open
+            }
+
+            EmitCsv(tokens, 0, Math.Min(close, n), resumed);
+            i = Math.Min(close, n);
+        }
+
+        while (i < n)
+        {
+            // One field per pass: its colour comes from its column, white on the header row.
+            int start = i;
+            TokenKind kind = CsvKind(header, column);
+
+            while (i < n)
+            {
+                char c = line[i];
+                if (c is ',' or ';' or '\t')
+                {
+                    break;
+                }
+
+                if (c == '"')
+                {
+                    int close = FindCsvQuoteEnd(line, i + 1);
+                    if (close < 0)
+                    {
+                        // The quote runs off the line: colour the tail, remember the column.
+                        EmitCsv(tokens, start, n - start, kind);
+                        return new SyntaxState(
+                            header ? SyntaxMode.CsvQuotedHeader : SyntaxMode.CsvQuotedBody,
+                            (byte)column);
+                    }
+
+                    i = Math.Min(close, n);
+                    continue;
+                }
+
+                i++;
+            }
+
+            EmitCsv(tokens, start, i - start, kind);
+
+            if (i < n)
+            {
+                i++; // the separator keeps the plain text colour
+                column = (column + 1) % CsvColumnCycle;
+            }
+        }
+
+        return new SyntaxState(SyntaxMode.CsvBody);
+    }
+
+    /// <summary>Emits a CSV span, skipping the plain-text columns the base colour already covers.</summary>
+    private static void EmitCsv(List<TokenSpan>? tokens, int start, int length, TokenKind kind)
+    {
+        if (kind != TokenKind.Text)
+        {
+            Emit(tokens, start, length, kind);
+        }
+    }
+
+    /// <summary>How many columns before the colour cycle repeats.</summary>
+    private const int CsvColumnCycle = 4;
+
+    private static TokenKind CsvKind(bool header, int column) => header
+        ? TokenKind.Keyword
+        : (column % CsvColumnCycle) switch
+        {
+            1 => TokenKind.String,
+            2 => TokenKind.Number,
+            3 => TokenKind.Preprocessor,
+            _ => TokenKind.Text,
+        };
+
+    /// <summary>
+    /// The index just past the quote that closes a field opened before <paramref name="from"/>,
+    /// honouring the <c>""</c> escape, or <c>-1</c> when the field runs off the line. Scans the
+    /// whole line, not the span cap, so the carried state stays honest.
+    /// </summary>
+    private static int FindCsvQuoteEnd(string line, int from)
+    {
+        int i = from;
+        while (i < line.Length)
+        {
+            if (line[i] != '"')
+            {
+                i++;
+                continue;
+            }
+
+            if (i + 1 < line.Length && line[i + 1] == '"')
+            {
+                i += 2; // "" is a literal quote
+                continue;
+            }
+
+            return i + 1;
+        }
+
+        return -1;
     }
 
     // ---------------------------------------------------------------- the Markdown scanner
