@@ -18,11 +18,11 @@
 
   <PropertyGroup>
     <Product>Open Commander</Product>
-    <Company>Open Commander contributors</Company>
-    <Copyright>Copyright (c) 2026 Open Commander contributors</Copyright>
-    <Authors>Open Commander contributors</Authors>
+    <Company>Dmytro Soyenko</Company>
+    <Copyright>Copyright (c) 2026 Dmytro Soyenko and Open Commander contributors</Copyright>
+    <Authors>Dmytro Soyenko and Open Commander contributors</Authors>
     <Version>0.1.0</Version>
-    <RepositoryUrl>https://github.com/opencommander/opencommander</RepositoryUrl>
+    <RepositoryUrl>https://github.com/Saixus/OpenCommander</RepositoryUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
   </PropertyGroup>
 

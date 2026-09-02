@@ -225,5 +225,5 @@ The first release: a working dual-pane file manager.
 - `F12` lists the open screens, which at the panel level means just the panels themselves — the
   viewer and the editor are modal, so they cannot yet be left running in the background.
 
-[Unreleased]: https://github.com/opencommander/opencommander/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/opencommander/opencommander/releases/tag/v0.1.0
+[Unreleased]: https://github.com/Saixus/OpenCommander/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/Saixus/OpenCommander/releases/tag/v0.1.0

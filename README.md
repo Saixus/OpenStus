@@ -9,8 +9,9 @@ and behaves the same in Windows Terminal, conhost, and any terminal emulator on 
 
 - **No third-party dependencies.** The application is a single assembly on top of the base class
   library; xunit is used by the test project only.
-- **Faithful to Far.** The palette, the key bar rows, the panel layout, the column headers, the
-  totals line and the selection semantics are transcribed from Far Manager's own sources.
+- **At home for Far Manager users.** The default colours, the key bar captions, the panel layout,
+  the column headers, the totals line and the selection semantics follow Far Manager's defaults, so
+  the muscle memory carries over - see [NOTICE.md](NOTICE.md) for the attribution.
 - **Testable rendering.** The whole UI paints into an in-memory `ScreenBuffer`, so a frame can be
   rendered, asserted on and printed without a console — which is what `--screenshot` does.
 
@@ -64,7 +65,7 @@ cyan and which blue is a question with a longer answer than you would expect; se
 Open Commander needs the [.NET 10 SDK](https://dotnet.microsoft.com/download).
 
 ```sh
-git clone https://github.com/opencommander/opencommander.git
+git clone https://github.com/Saixus/OpenCommander.git
 cd opencommander
 
 dotnet build OpenCommander.sln
@@ -505,5 +506,8 @@ expectations, and [CHANGELOG.md](CHANGELOG.md) for what has landed so far.
 
 MIT. See [LICENSE](LICENSE).
 
-Far Manager is copyright its own authors; Open Commander is an independent re-implementation of its
-user interface conventions and shares no code with it.
+Open Commander is an independent re-implementation of the user-interface conventions Far Manager
+made familiar and shares no code with it. "Far Manager" is the name of that project, used here only
+to describe compatibility and inspiration; Open Commander is not affiliated with or endorsed by Far
+Group. The defaults borrowed from it - colours, key bar captions, layout - are acknowledged, with
+Far Manager's BSD 3-Clause notice, in [NOTICE.md](NOTICE.md).
