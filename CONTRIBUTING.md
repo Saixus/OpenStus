@@ -1,6 +1,6 @@
-# Contributing to Dvopan
+# Contributing to Open Stus
 
-Thanks for looking. Dvopan is a small, deliberately dependency-free codebase, and the rules
+Thanks for looking. Open Stus is a small, deliberately dependency-free codebase, and the rules
 below exist mostly to keep it that way.
 
 ## Getting set up
@@ -8,8 +8,8 @@ below exist mostly to keep it that way.
 You need the [.NET 10 SDK](https://dotnet.microsoft.com/download) and nothing else.
 
 ```sh
-dotnet build Dvopan.sln
-dotnet test  tests/Dvopan.Tests/Dvopan.Tests.csproj
+dotnet build OpenStus.sln
+dotnet test  tests/OpenStus.Tests/OpenStus.Tests.csproj
 ```
 
 Both must be clean before you open a pull request. CI runs exactly these two commands, plus a
@@ -21,8 +21,8 @@ This is a full-screen TUI, so `dotnet run` takes over the terminal and blocks. D
 the screenshot hook instead — it renders one frame to stdout and exits:
 
 ```sh
-dotnet run --project src/Dvopan/Dvopan.csproj -- --screenshot --size 120x40
-dotnet run --project src/Dvopan/Dvopan.csproj -- --screenshot --ansi --size 120x40
+dotnet run --project src/OpenStus/OpenStus.csproj -- --screenshot --size 120x40
+dotnet run --project src/OpenStus/OpenStus.csproj -- --screenshot --ansi --size 120x40
 ```
 
 `--size` forces a virtual screen, which also means the run never touches the real console: no
@@ -49,16 +49,16 @@ alternate screen buffer, no console mode changes, no input loop.
 
 | Namespace | Owns |
 | --- | --- |
-| `Dvopan.Rendering` | The cell buffer, box drawing, and the diffing VT terminal |
-| `Dvopan.Input` | Key, mouse and resize events, and the two input backends |
-| `Dvopan.Theming` | The colour palette and its JSON form |
-| `Dvopan.Files` | Directory reading, sorting, masks, sizes, drives |
-| `Dvopan.Panels` | The file panel, its view modes and its column layout |
-| `Dvopan.Ui` | Dialogs, controls, menus, key bar, command line, clock, help |
-| `Dvopan.Viewer` / `.Editor` | The F3 viewer and the F4 editor |
-| `Dvopan.Operations` | Copy, move, delete, search, folder sizes |
-| `Dvopan.Shell` | Running commands, history, path completion |
-| `Dvopan.Core` | The interfaces the layers talk through, and the shell that wires them |
+| `OpenStus.Rendering` | The cell buffer, box drawing, and the diffing VT terminal |
+| `OpenStus.Input` | Key, mouse and resize events, and the two input backends |
+| `OpenStus.Theming` | The colour palette and its JSON form |
+| `OpenStus.Files` | Directory reading, sorting, masks, sizes, drives |
+| `OpenStus.Panels` | The file panel, its view modes and its column layout |
+| `OpenStus.Ui` | Dialogs, controls, menus, key bar, command line, clock, help |
+| `OpenStus.Viewer` / `.Editor` | The F3 viewer and the F4 editor |
+| `OpenStus.Operations` | Copy, move, delete, search, folder sizes |
+| `OpenStus.Shell` | Running commands, history, path completion |
+| `OpenStus.Core` | The interfaces the layers talk through, and the shell that wires them |
 
 The dependency direction is one way, from `Core` outwards. If a low-level type needs to call up, add
 an interface in `Core` rather than a reference.
@@ -96,7 +96,7 @@ an interface in `Core` rather than a reference.
 Please include your OS and terminal emulator, the console size, and — where it helps — the output of
 
 ```sh
-oc --screenshot --size 120x40
+stus --screenshot --size 120x40
 ```
 
 which is plain text you can paste straight into an issue.

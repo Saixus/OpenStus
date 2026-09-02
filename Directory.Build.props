@@ -1,7 +1,7 @@
 <Project>
 
   <!--
-    Settings shared by every project in the Dvopan repository.
+    Settings shared by every project in the OpenStus repository.
     Project-specific settings live in the individual .csproj files.
   -->
   <PropertyGroup>
@@ -17,12 +17,12 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <Product>Dvopan</Product>
+    <Product>Open Stus</Product>
     <Company>Dmytro Soyenko</Company>
-    <Copyright>Copyright (c) 2026 Dmytro Soyenko and Dvopan contributors</Copyright>
-    <Authors>Dmytro Soyenko and Dvopan contributors</Authors>
+    <Copyright>Copyright (c) 2026 Dmytro Soyenko and Open Stus contributors</Copyright>
+    <Authors>Dmytro Soyenko and Open Stus contributors</Authors>
     <Version>0.1.0</Version>
-    <RepositoryUrl>https://github.com/Saixus/Dvopan</RepositoryUrl>
+    <RepositoryUrl>https://github.com/Saixus/OpenStus</RepositoryUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
   </PropertyGroup>
 

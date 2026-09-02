@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to Dvopan are recorded here. The format follows
+All notable changes to Open Stus are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
@@ -142,6 +142,9 @@ the four reported issues at the top of this list.
 
 ### Changed
 
+- **Renamed to Open Stus.** The solution, the projects, the namespaces and the settings folder are
+  `OpenStus`, and the executable is `stus` (it was `oc`). The name honours the poet Vasyl Stus; the
+  README says why. Settings and history now live under `OpenStus` in the profile folder.
 - `--screenshot --ansi` now renders at the colour depth and through the palette the run resolved,
   rather than always emitting the indexed slots, so a screenshot shows what the live terminal is
   sent. Piping it to a file still yields indexed output, since redirected output is one of the
@@ -160,7 +163,7 @@ the four reported issues at the top of this list.
   names shift everything to their right, and non-BMP characters (emoji) render as two replacement
   glyphs. A width-aware cell model is planned.
 - The classic *Detailed* mode is a fullscreen mode with packed size and all three timestamps; Open
-  Commander's `Ctrl+5` stays at half width with modified time and attributes only.
+  Stus's `Ctrl+5` stays at half width with modified time and attributes only.
 
 ## [0.1.0] - 2026-08-08
 
@@ -225,5 +228,5 @@ The first release: a working dual-pane file manager.
 - `F12` lists the open screens, which at the panel level means just the panels themselves — the
   viewer and the editor are modal, so they cannot yet be left running in the background.
 
-[Unreleased]: https://github.com/Saixus/Dvopan/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/Saixus/Dvopan/releases/tag/v0.1.0
+[Unreleased]: https://github.com/Saixus/OpenStus/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/Saixus/OpenStus/releases/tag/v0.1.0

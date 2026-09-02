@@ -1,6 +1,6 @@
-# Dvopan
+# Open Stus
 
-Dvopan is an open source, cross-platform dual-pane console file manager written in C# on .NET 10:
+Open Stus is an open source, cross-platform dual-pane console file manager written in C# on .NET 10:
 an open source alternative to Far Manager, Midnight Commander and the other orthodox file managers.
 
 Two panels, a command line, a function key bar and a clock — the layout every orthodox file manager
@@ -15,16 +15,26 @@ and behaves the same in Windows Terminal, conhost, and any terminal emulator on 
 - **Testable rendering.** The whole UI paints into an in-memory `ScreenBuffer`, so a frame can be
   rendered, asserted on and printed without a console — which is what `--screenshot` does.
 
+## About the name
+
+The project is named after Vasyl Stus (1938-1985), the Ukrainian poet, translator and literary
+critic who became one of the leading voices of the Ukrainian dissident movement. The Soviet regime
+banned his work. He was arrested in 1972 and again in 1980, spent thirteen years in camps and exile
+for his convictions, and died in 1985 in Perm-36, the forced labour camp for political prisoners.
+He was reburied in Kyiv in 1989 and named a Hero of Ukraine in 2005.
+
+The name is a tribute and nothing more: the project has no connection with his family or estate.
+
 ## Screenshot
 
 Rendered with
 
 ```
-oc --screenshot --size 120x28 --clock 10:06 --left . --right ./src/Dvopan/Text/Syntax
+stus --screenshot --size 120x28 --clock 10:06 --left . --right ./src/OpenStus/Text/Syntax
 ```
 
 ```
-╔═════════════════════ C:\Work\dvopan ═════════════════════╗╔═════════ C:\Work\dvopan\src\Dvopan\Text\Syntax ═══10:06 AM
+╔════════════════════ C:\Work\openstus ════════════════════╗╔═══════ C:\Work\openstus\src\OpenStus\Text\Syntax ═10:06 AM
 ║n           Name             │            Name            ║║n           Name             │            Name            ║
 ║..                           │                            ║║..                           │                            ║
 ║.github                      │                            ║║LineStateCache.cs            │                            ║
@@ -36,9 +46,9 @@ oc --screenshot --size 120x28 --clock 10:06 --left . --right ./src/Dvopan/Text/S
 ║CHANGELOG.md                 │                            ║║                             │                            ║
 ║CONTRIBUTING.md              │                            ║║                             │                            ║
 ║Directory.Build.props        │                            ║║                             │                            ║
-║Dvopan.sln                   │                            ║║                             │                            ║
 ║LICENSE                      │                            ║║                             │                            ║
 ║NOTICE.md                    │                            ║║                             │                            ║
+║OpenStus.sln                 │                            ║║                             │                            ║
 ║README.md                    │                            ║║                             │                            ║
 ║                             │                            ║║                             │                            ║
 ║                             │                            ║║                             │                            ║
@@ -48,9 +58,9 @@ oc --screenshot --size 120x28 --clock 10:06 --left . --right ./src/Dvopan/Text/S
 ║                             │                            ║║                             │                            ║
 ║                             │                            ║║                             │                            ║
 ╟──────────────────────────────────────────────────────────╢╟──────────────────────────────────────────────────────────╢
-║..                                     Up  09/02/26  16:33║║..                                     Up  09/02/26  16:33║
+║..                                     Up  09/02/26  17:41║║..                                     Up  09/02/26  17:41║
 ╚══════════ Bytes: 19.2 K, files: 9, folders: 4 ═══════════╝╚══════════ Bytes: 22.1 K, files: 4, folders: 0 ═══════════╝
-C:\Work\dvopan>
+C:\Work\openstus>
 1Help    2UserMn    3View    4Edit    5Copy    6RenMov    7MkFold    8Delete   9ConfMn   10Quit   11Plugin   12Screen
 ```
 
@@ -62,23 +72,23 @@ cyan and which blue is a question with a longer answer than you would expect; se
 
 ## Building and running
 
-Dvopan needs the [.NET 10 SDK](https://dotnet.microsoft.com/download).
+Open Stus needs the [.NET 10 SDK](https://dotnet.microsoft.com/download).
 
 ```sh
-git clone https://github.com/Saixus/Dvopan.git
-cd dvopan
+git clone https://github.com/Saixus/OpenStus.git
+cd OpenStus
 
-dotnet build Dvopan.sln
-dotnet test  tests/Dvopan.Tests/Dvopan.Tests.csproj
+dotnet build OpenStus.sln
+dotnet test  tests/OpenStus.Tests/OpenStus.Tests.csproj
 
 # run it
-dotnet run --project src/Dvopan/Dvopan.csproj
+dotnet run --project src/OpenStus/OpenStus.csproj
 ```
 
-To produce a standalone executable named `oc`:
+To produce a standalone executable named `stus`:
 
 ```sh
-dotnet publish src/Dvopan/Dvopan.csproj -c Release -r win-x64   # or linux-x64, osx-arm64, ...
+dotnet publish src/OpenStus/OpenStus.csproj -c Release -r win-x64   # or linux-x64, osx-arm64, ...
 ```
 
 `PublishSingleFile` switches itself on as soon as a runtime identifier is given, so the result is one
@@ -87,7 +97,7 @@ file you can drop on the `PATH`.
 ### Command line
 
 ```
-oc [startPath] [options]
+stus [startPath] [options]
 
   startPath              the folder both panels open in
 
@@ -120,7 +130,7 @@ job.
 
 `--ansi` and `--size` only mean anything together with `--screenshot`, and `--size` is refused
 without it rather than quietly doing nothing: a forced size makes the terminal headless, so an
-interactive `oc --size 80x25` would paint into a screen no one can see and exit having printed
+interactive `stus --size 80x25` would paint into a screen no one can see and exit having printed
 nothing. An interactive run always takes its size from the console and follows it as you resize the
 window.
 
@@ -131,8 +141,8 @@ under the invariant culture so a build machine's locale cannot move it — and `
 clock altogether, which is usually what you want in CI:
 
 ```sh
-oc --screenshot --size 120x28 --clock off --left . > frame.txt
-diff frame.txt tests/golden/frame.txt
+stus --screenshot --size 120x28 --clock off --left . > frame.txt
+diff frame.txt golden/frame.txt   # against a frame you committed earlier
 ```
 
 ## Colours
@@ -150,8 +160,8 @@ The dominant pair, as WCAG contrast ratios:
 | Palette | Panel text on panel background | Contrast |
 | --- | --- | --- |
 | Windows Terminal *Campbell* | `#61D6D6` on `#0037DA` | **4.73:1** |
-| Classic VGA — Dvopan's default | `#55FFFF` on `#0000AA` | **10.84:1** |
-| Legacy Windows console (the NT table) | `#00FFFF` on `#000080` | **12.77:1** |
+| Classic VGA | `#55FFFF` on `#0000AA` | **10.84:1** |
+| Legacy Windows console (the NT table) — Open Stus's default | `#00FFFF` on `#000080` | **12.77:1** |
 
 Campbell's blue is about 2.7 times as bright as the classic one (relative luminance 0.078 against
 0.029), and that brightness is what closes the gap against the cyan in front of it. 4.73:1 barely
@@ -160,12 +170,12 @@ Campbell also packs blue, bright blue, cyan and bright cyan into a narrow lumina
 cyan on its blue is 2.57:1, below the 3:1 minimum for a UI element at all. "Blended" is exactly the
 right word for it.
 
-So Dvopan does not ask for a slot. Wherever the terminal can take it, each cell is written as
-24-bit colour resolved through the classic VGA palette — `ESC[38;2;85;255;255;48;2;0;0;170m` instead
+So Open Stus does not ask for a slot. Wherever the terminal can take it, each cell is written as
+24-bit colour resolved through the NT palette — `ESC[38;2;0;255;255;48;2;0;0;128m` instead
 of `ESC[96;44m` — and the panels then look the same whatever the terminal is themed as. Some managers
 get the same effect by overwriting the console's palette outright at start-up.
 Pinning the colours per cell was preferred here because it leaves the terminal's own scheme untouched
-for every other program, including the ones `oc` runs from its command line.
+for every other program, including the ones `stus` runs from its command line.
 
 The cost is small and bounded: a full repaint of a 130x30 screen grows from about 5.4 KB to 6.9 KB.
 The renderer emits an SGR sequence only when the colour pair changes, so the two modes differ in how
@@ -175,9 +185,9 @@ costs nothing.
 ### Choosing the depth
 
 ```sh
-oc --colors auto        # the default: work out what the terminal can take
-oc --colors truecolor   # always 24-bit, whatever the terminal advertises
-oc --colors indexed     # always the 16 slots, leaving your scheme in charge
+stus --colors auto        # the default: work out what the terminal can take
+stus --colors truecolor   # always 24-bit, whatever the terminal advertises
+stus --colors indexed     # always the 16 slots, leaving your scheme in charge
 ```
 
 `indexed` is the escape hatch. If you have themed your terminal deliberately, 24-bit output is
@@ -188,7 +198,7 @@ precisely the override you did not ask for — pass `--colors indexed`, or save 
 ```
 
 The [`NO_COLOR`](https://no-color.org/) environment variable is honoured the same way: when it is
-present and not empty, whatever its value, Dvopan stays on the 16 indexed slots and your
+present and not empty, whatever its value, Open Stus stays on the 16 indexed slots and your
 terminal's scheme decides how everything looks. It never turns the interface monochrome — a file
 manager without its colours is not a file manager.
 
@@ -218,7 +228,7 @@ Detection itself, most trustworthy signal first:
 
 `--screenshot --ansi` renders through the same resolved depth and palette as the live run, so a
 screenshot shows what your terminal is actually sent — piping it to a file gives you indexed output
-by rule 2, and `oc --screenshot --ansi --colors truecolor` overrides that.
+by rule 2, and `stus --screenshot --ansi --colors truecolor` overrides that.
 
 ### Choosing the colours
 
@@ -241,8 +251,8 @@ ignored.
 ```
 
 That one is the legacy Windows NT console table, and it is a slightly harder look
-than the DOS-era default: `#000080` instead of `#0000AA` behind the panels. Slots the file omits keep
-their classic VGA value, so a file may name a single colour. Keys are `ConsoleColor` names, the
+than the DOS-era VGA table: `#000080` instead of `#0000AA` behind the panels. Slots the file omits keep
+their built-in NT value, so a file may name a single colour. Keys are `ConsoleColor` names, the
 indices `0`-`15`, or the familiar aliases (`LightCyan`, `Brown`, `BrightWhite`, ...), and colours are
 `"#RRGGBB"`. A missing, unreadable or malformed file falls back to the built-in table — a broken
 colour file must never keep you out of your file manager.
@@ -403,8 +413,8 @@ Everything lives in one folder:
 
 | Platform | Folder |
 | --- | --- |
-| Windows | `%APPDATA%\Dvopan\` |
-| Linux, macOS | `$XDG_CONFIG_HOME/Dvopan/`, defaulting to `~/.config/Dvopan/` |
+| Windows | `%APPDATA%\OpenStus\` |
+| Linux, macOS | `$XDG_CONFIG_HOME/OpenStus/`, defaulting to `~/.config/OpenStus/` |
 
 | File | What it is |
 | --- | --- |
@@ -443,7 +453,7 @@ tells you where to create it.
 ## Project layout
 
 ```
-src/Dvopan/
+src/OpenStus/
   Core/         the shell: Application, UiServices, KeyBindings, MainMenu, CommandLineArgs, Settings
   Rendering/    ScreenBuffer, CellStyle, box drawing, and the diffing VT Terminal
   Input/        KeyEvent, MouseEvent and the Windows / portable input backends
@@ -457,7 +467,7 @@ src/Dvopan/
   Shell/        running commands, the command history, path completion
   Text/         encoding detection and line ending handling
 
-tests/Dvopan.Tests/   xunit, no mocking framework, ~1360 tests
+tests/OpenStus.Tests/   xunit, no mocking framework, ~1750 tests
 ```
 
 The dependency direction is one way: `Rendering`, `Input`, `Theming` and `Files` know nothing about
@@ -492,7 +502,7 @@ the only type that wires the whole thing together.
   and <kbd>Shift</kbd>+<kbd>F2</kbd> to add and extract.
 - **Plugins** — a real plugin surface behind <kbd>F11</kbd>, so a panel can be backed by something
   other than the file system.
-- **Tree panel** (<kbd>Ctrl</kbd>+<kbd>T</kbd>) and **quick view** (<kbd>Ctrl</kbd>+<kbd>Q</kbd>).
+- **Tree panel** and **quick view** (<kbd>Ctrl</kbd>+<kbd>Q</kbd>).
 - **FTP and SFTP** panels.
 - Folder shortcuts, the file description database, sort groups and file highlighting rules.
 - The remaining view modes 6-9 (descriptions, owners, links), which currently fall back to Full.
@@ -506,6 +516,6 @@ expectations, and [CHANGELOG.md](CHANGELOG.md) for what has landed to date.
 
 MIT. See [LICENSE](LICENSE).
 
-Dvopan is an independent implementation that shares no code with any other file manager. Norton
+Open Stus is an independent implementation that shares no code with any other file manager. Norton
 Commander, Midnight Commander and Far Manager are the names of other projects, mentioned only to
-describe the conventions Dvopan follows and the alternatives it offers; see [NOTICE.md](NOTICE.md).
+describe the conventions Open Stus follows and the alternatives it offers; see [NOTICE.md](NOTICE.md).

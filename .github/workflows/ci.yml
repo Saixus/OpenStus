@@ -33,14 +33,14 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Restore
-        run: dotnet restore Dvopan.sln
+        run: dotnet restore OpenStus.sln
 
       - name: Build
-        run: dotnet build Dvopan.sln --configuration Release --no-restore
+        run: dotnet build OpenStus.sln --configuration Release --no-restore
 
       - name: Test
         run: >
-          dotnet test tests/Dvopan.Tests/Dvopan.Tests.csproj
+          dotnet test tests/OpenStus.Tests/OpenStus.Tests.csproj
           --configuration Release
           --no-build
           --logger "trx;LogFileName=test-results.trx"
@@ -52,8 +52,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          dotnet run --project src/Dvopan/Dvopan.csproj --configuration Release --no-build -- \
-            --screenshot --size 120x40 --left . --right ./src/Dvopan > frame.txt
+          dotnet run --project src/OpenStus/OpenStus.csproj --configuration Release --no-build -- \
+            --screenshot --size 120x40 --left . --right ./src/OpenStus > frame.txt
           cat frame.txt
           grep -q 'Name'   frame.txt
           grep -q 'Bytes:' frame.txt
@@ -64,8 +64,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          dotnet run --project src/Dvopan/Dvopan.csproj --configuration Release --no-build -- --version
-          dotnet run --project src/Dvopan/Dvopan.csproj --configuration Release --no-build -- --help
+          dotnet run --project src/OpenStus/OpenStus.csproj --configuration Release --no-build -- --version
+          dotnet run --project src/OpenStus/OpenStus.csproj --configuration Release --no-build -- --help
 
       - name: Upload test results
         if: always()
