@@ -1593,3 +1593,125 @@ public class CommandLineRecallResetTests
         Assert.Equal(["dotnet", "more"], commands);
     }
 }
+
+/// <summary>Tab completion the way a shell does it: narrow first, then offer a list.</summary>
+public class CommandLineTabCompletionTests : IDisposable
+{
+    private readonly string _root = Path.Combine(Path.GetTempPath(), "oc-tab-" + Guid.NewGuid().ToString("N")[..8]);
+
+    public CommandLineTabCompletionTests()
+    {
+        Directory.CreateDirectory(Path.Combine(_root, "album"));
+        Directory.CreateDirectory(Path.Combine(_root, "alpha"));
+        File.WriteAllText(Path.Combine(_root, "alfa.txt"), "a");
+        File.WriteAllText(Path.Combine(_root, "beta.txt"), "b");
+    }
+
+    public void Dispose()
+    {
+        try
+        {
+            Directory.Delete(_root, recursive: true);
+        }
+        catch (IOException)
+        {
+        }
+    }
+
+    /// <summary>A context whose UI answers the completion menu with a canned pick.</summary>
+    private sealed class MenuContext(int pick) : IAppContext
+    {
+        public FakeUi Fake { get; } = new() { MenuAnswer = pick };
+
+        public Theme Theme { get; } = Theme.FarDefault();
+
+        public Settings Settings { get; } = new();
+
+        public Terminal Terminal => throw new NotSupportedException();
+
+        public IUiServices Ui => Fake;
+
+        public IFilePanel ActivePanel => throw new NotSupportedException();
+
+        public IFilePanel PassivePanel => throw new NotSupportedException();
+
+        public IFilePanel LeftPanel => throw new NotSupportedException();
+
+        public IFilePanel RightPanel => throw new NotSupportedException();
+
+        public void SwapPanels() => throw new NotSupportedException();
+
+        public void SwitchPanel() => throw new NotSupportedException();
+
+        public void RequestQuit() => throw new NotSupportedException();
+
+        public void Redraw() => throw new NotSupportedException();
+
+        public void RefreshBothPanels() => throw new NotSupportedException();
+
+        public void RunShellCommand(string command)
+        {
+        }
+
+        public void InsertIntoCommandLine(string text) => throw new NotSupportedException();
+    }
+
+    private CommandLine Line(IAppContext ctx) => new(ctx.Theme, new CommandHistory()) { Prefix = _root };
+
+    [Fact]
+    public void ASingleMatchIsTakenOutright()
+    {
+        var ctx = new MenuContext(-1);
+        CommandLine line = Line(ctx);
+        Keys.Type(line, ctx, "type be");
+
+        Assert.True(line.HandleKey(Keys.Key(ConsoleKey.Tab), ctx));
+        Assert.Equal("type beta.txt", line.Text);
+    }
+
+    [Fact]
+    public void SeveralMatchesAreFirstNarrowedToWhatTheyShare()
+    {
+        var ctx = new MenuContext(-1);
+        CommandLine line = Line(ctx);
+        Keys.Type(line, ctx, "a");
+
+        // album, alpha and alfa.txt share "al": the token grows, and no list opens yet.
+        Assert.True(line.HandleKey(Keys.Key(ConsoleKey.Tab), ctx));
+        Assert.Equal("al", line.Text);
+        Assert.Equal(2, line.Caret);
+        Assert.Empty(ctx.Fake.Shown);
+    }
+
+    [Fact]
+    public void WhenNothingMoreIsSharedAListOpensAndThePickIsTaken()
+    {
+        var ctx = new MenuContext(2); // the third entry: directories first, then alfa.txt
+        CommandLine line = Line(ctx);
+        Keys.Type(line, ctx, "type al");
+
+        Assert.True(line.HandleKey(Keys.Key(ConsoleKey.Tab), ctx));
+        Assert.Equal("type alfa.txt", line.Text);
+        Assert.Equal(line.Text.Length, line.Caret);
+    }
+
+    [Fact]
+    public void CancellingTheListLeavesTheLineAlone()
+    {
+        var ctx = new MenuContext(-1);
+        CommandLine line = Line(ctx);
+        Keys.Type(line, ctx, "al");
+
+        Assert.True(line.HandleKey(Keys.Key(ConsoleKey.Tab), ctx));
+        Assert.Equal("al", line.Text);
+    }
+
+    [Fact]
+    public void TheCommonPrefixIgnoresCaseAndKeepsQuotesWhereNeeded()
+    {
+        Assert.Equal("al", PathCompletion.CommonPrefix(["album\\", "ALPHA\\", "alfa.txt"]));
+        Assert.Equal("\"two w\"", PathCompletion.CommonPrefix(["\"two words\\\"", "\"two wide.txt\""]));
+        Assert.Equal(string.Empty, PathCompletion.CommonPrefix(["a", "b"]));
+        Assert.Equal(string.Empty, PathCompletion.CommonPrefix([]));
+    }
+}

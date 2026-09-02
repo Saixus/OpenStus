@@ -48,7 +48,6 @@ public sealed class CommandLine
     private const int MinTextWidth = 16;
 
     private readonly Theme _theme;
-    private readonly PathCompletion _completion = new();
     private readonly List<CommandToken> _tokens = [];
 
     private string _text = string.Empty;
@@ -105,7 +104,6 @@ public sealed class CommandLine
         {
             _text = value ?? string.Empty;
             _caret = _text.Length;
-            _completion.Reset();
             History.ResetCursor();
             _pendingLine = null;
         }
@@ -247,7 +245,6 @@ public sealed class CommandLine
 
         _text = _text.Insert(_caret, text);
         _caret += text.Length;
-        _completion.Reset();
         History.ResetCursor();
         _pendingLine = null;
     }
@@ -258,7 +255,6 @@ public sealed class CommandLine
         _text = string.Empty;
         _caret = 0;
         _scroll = 0;
-        _completion.Reset();
         History.ResetCursor();
         _pendingLine = null;
     }
@@ -354,7 +350,7 @@ public sealed class CommandLine
                     return false; // an empty line means Tab switches panels
                 }
 
-                return CompletePath();
+                return CompletePath(ctx);
 
             case ConsoleKey.Backspace:
                 if (empty || _caret == 0)
@@ -512,7 +508,6 @@ public sealed class CommandLine
 
         _text = suggestion[..end];
         _caret = _text.Length;
-        _completion.Reset();
         History.ResetCursor();
         _pendingLine = null;
     }
@@ -548,19 +543,70 @@ public sealed class CommandLine
         return true;
     }
 
-    private bool CompletePath()
+    /// <summary>
+    /// Tab: completes the file or folder name under the caret against the active panel's folder,
+    /// the way a shell does. One match is taken outright; several are first narrowed to what they
+    /// all share, and when nothing more can be shared a list opens right above the token so the
+    /// pick is a matter of arrows and Enter.
+    /// </summary>
+    private bool CompletePath(IAppContext? ctx)
     {
         string baseDirectory = string.IsNullOrWhiteSpace(Prefix) ? Environment.CurrentDirectory : Prefix;
-        if (!_completion.TryComplete(_text, _caret, baseDirectory, out string text, out int caret))
+
+        (int start, int length) = PathCompletion.TokenAt(_text, _caret);
+        string token = _text.Substring(start, length);
+        IReadOnlyList<string> matches = PathCompletion.Matches(token, baseDirectory);
+
+        if (matches.Count == 0)
         {
             return true; // nothing matched, but Tab still belongs to the command line
         }
 
-        _text = text;
-        _caret = Math.Clamp(caret, 0, _text.Length);
+        if (matches.Count == 1)
+        {
+            ReplaceToken(start, length, matches[0]);
+            return true;
+        }
+
+        string common = PathCompletion.CommonPrefix(matches);
+        if (common.Length > 0 && !string.Equals(common, token, StringComparison.Ordinal) &&
+            common.Length > token.Length)
+        {
+            ReplaceToken(start, length, common);
+            return true;
+        }
+
+        if (ctx is null)
+        {
+            return true;
+        }
+
+        var items = new List<MenuItem>(matches.Count);
+        foreach (string match in matches)
+        {
+            items.Add(new MenuItem(match.Replace("&", "&&", StringComparison.Ordinal)));
+        }
+
+        // Anchored on the token, opening upwards from the command line; the menu keeps itself on
+        // screen when that would not fit.
+        int x = Math.Max(0, CaretX - (_caret - start));
+        int y = Math.Max(0, CaretY - items.Count - 2);
+        int pick = ctx.Ui.Menu("Complete", items, 0, new Rect(x, y, 0, 0));
+        if (pick >= 0 && pick < matches.Count)
+        {
+            ReplaceToken(start, length, matches[pick]);
+        }
+
+        return true;
+    }
+
+    /// <summary>Replaces <c>[start, start + length)</c> and puts the caret after the replacement.</summary>
+    private void ReplaceToken(int start, int length, string replacement)
+    {
+        _text = string.Concat(_text.AsSpan(0, start), replacement, _text.AsSpan(start + length));
+        _caret = start + replacement.Length;
         History.ResetCursor();
         _pendingLine = null;
-        return true;
     }
 
     /// <summary>
@@ -621,7 +667,6 @@ public sealed class CommandLine
     {
         _text = entry;
         _caret = entry.Length;
-        _completion.Reset();
     }
 
     private void MoveCaret(int position)
@@ -633,7 +678,6 @@ public sealed class CommandLine
     private void AfterEdit()
     {
         _caret = Math.Clamp(_caret, 0, _text.Length);
-        _completion.Reset();
         History.ResetCursor();
         _pendingLine = null;
     }

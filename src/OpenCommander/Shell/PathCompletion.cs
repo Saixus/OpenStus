@@ -268,6 +268,41 @@ public sealed class PathCompletion
     }
 
     /// <summary>
+    /// The longest prefix every completion shares - what a shell extends the token to when Tab
+    /// finds several matches, so the next Tab has less to choose between. Quotes are ignored for
+    /// the comparison and put back when the result needs them.
+    /// </summary>
+    /// <param name="matches">The completions, as <see cref="Matches"/> returns them.</param>
+    /// <returns>The common prefix, quoted when it contains a space; empty when there is none.</returns>
+    public static string CommonPrefix(IReadOnlyList<string> matches)
+    {
+        ArgumentNullException.ThrowIfNull(matches);
+
+        if (matches.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        string first = Unquote(matches[0]);
+        int length = first.Length;
+
+        for (int i = 1; i < matches.Count && length > 0; i++)
+        {
+            string other = Unquote(matches[i]);
+            int common = 0;
+            while (common < length && common < other.Length &&
+                   string.Compare(first, common, other, common, 1, NameComparison) == 0)
+            {
+                common++;
+            }
+
+            length = common;
+        }
+
+        return Quote(first[..length]);
+    }
+
+    /// <summary>
     /// Expands <c>%VAR%</c>, <c>$VAR</c>, <c>${VAR}</c> and a leading <c>~</c>.
     /// </summary>
     /// <param name="text">The text to expand.</param>

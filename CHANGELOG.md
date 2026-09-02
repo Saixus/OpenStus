@@ -14,7 +14,10 @@ All notable changes to Open Commander are recorded here. The format follows
   that start like the typed text (`git` then Up visits only the git commands; Ctrl+E / Ctrl+X still
   walk everything); the newest matching entry is shown as a grey ghost after the caret and taken
   with Right or End, one word at a time with Ctrl+Right; Ctrl+Backspace and Ctrl+Delete remove a
-  word. The user screen behind Ctrl+O is anchored the same way: the prompt stays on the bottom row
+  word. Tab completes file and folder names of the active panel's folder the way a shell does: a
+  single match is taken outright, several are first narrowed to what they share, and when nothing
+  more is shared a list opens above the token to pick from. The user screen behind Ctrl+O is
+  anchored the same way: the prompt stays on the bottom row
   instead of jumping to wherever the last command left the cursor, every command run leaves a
   coloured `path> command` line above its output so the screen reads like a terminal session, and
   the ghost suggestion is drawn there too.

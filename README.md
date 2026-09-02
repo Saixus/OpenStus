@@ -385,7 +385,7 @@ generated from `HelpScreen.Bindings`, so they cannot drift apart.
 | `Up / Down` | Walk the history of commands starting like the typed text |
 | `Ctrl+E / Ctrl+X` | Walk the whole command history |
 | `Right / End` | Accept the grey suggestion after the caret |
-| `Tab` | Complete the path under the caret |
+| `Tab` | Complete the file name under the caret; a list when several match |
 | `Ctrl+Left / Ctrl+Right` | Move one word |
 | `Ctrl+Backspace / Ctrl+Del` | Delete one word |
 | `Ctrl+Enter / Ctrl+J` | Insert the name under the cursor |

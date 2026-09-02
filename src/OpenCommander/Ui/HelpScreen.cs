@@ -317,7 +317,7 @@ public sealed class HelpScreen : IScreenComponent
         ("Command line", "Up / Down", "Walk the history of commands starting like the typed text"),
         ("Command line", "Ctrl+E / Ctrl+X", "Walk the whole command history"),
         ("Command line", "Right / End", "Accept the grey suggestion after the caret"),
-        ("Command line", "Tab", "Complete the path under the caret"),
+        ("Command line", "Tab", "Complete the file name under the caret; a list when several match"),
         ("Command line", "Ctrl+Left / Ctrl+Right", "Move one word"),
         ("Command line", "Ctrl+Backspace / Ctrl+Del", "Delete one word"),
         ("Command line", "Ctrl+Enter / Ctrl+J", "Insert the name under the cursor"),
