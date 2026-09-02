@@ -49,8 +49,9 @@ public static class EncodingDetector
     /// registers on startup. Whatever is chosen must map all 256 byte values to distinct
     /// characters and back, so an unrecognised file still round-trips byte for byte through a
     /// load, an edit and a save - which is why a double byte ANSI page (the CJK ones) is refused
-    /// in favour of Latin-1 until per-file code page switching exists. On Unix the fallback is
-    /// UTF-8.
+    /// in favour of Latin-1 until per-file code page switching exists. On Unix, where there is no
+    /// ANSI page, the fallback is Latin-1 for the same reason: UTF-8 would turn every invalid
+    /// byte into U+FFFD and a save would write the replacement out.
     /// </remarks>
     public static Encoding AnsiFallback { get; } = ResolveAnsiFallback();
 
@@ -374,7 +375,7 @@ public static class EncodingDetector
     {
         if (!OperatingSystem.IsWindows())
         {
-            return Utf8NoBom;
+            return Encoding.Latin1;
         }
 
         try

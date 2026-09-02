@@ -13,7 +13,8 @@ internal static class PanelFixture
 {
     public const int Width = 40;
     public const int Height = 20;
-    public const string DemoPath = @"C:\Work\Demo";
+    // A path that is native to the host, so the title and the parent read the same on Unix.
+    public static readonly string DemoPath = OperatingSystem.IsWindows() ? @"C:\Work\Demo" : "/work/Demo";
 
     public static readonly DateTime Stamp = new(2026, 8, 8, 14, 30, 0);
 
@@ -22,7 +23,7 @@ internal static class PanelFixture
     public static FileEntry Parent() => new()
     {
         Name = "..",
-        FullPath = @"C:\Work",
+        FullPath = Path.GetDirectoryName(DemoPath)!,
         IsDirectory = true,
         IsParent = true,
         Attributes = FileAttributes.Directory,

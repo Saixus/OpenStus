@@ -1708,7 +1708,9 @@ public class CommandLineTabCompletionTests : IDisposable
     [Fact]
     public void TheCommonPrefixIgnoresCaseAndKeepsQuotesWhereNeeded()
     {
-        Assert.Equal("al", PathCompletion.CommonPrefix(["album\\", "ALPHA\\", "alfa.txt"]));
+        Assert.Equal("al", PathCompletion.CommonPrefix(["album\\", "alpha\\", "alfa.txt"]));
+        // Names compare the way the file system does: case-blind on Windows, exact elsewhere.
+        Assert.Equal(OperatingSystem.IsWindows() ? "al" : string.Empty, PathCompletion.CommonPrefix(["album\\", "ALPHA\\", "alfa.txt"]));
         Assert.Equal("\"two w\"", PathCompletion.CommonPrefix(["\"two words\\\"", "\"two wide.txt\""]));
         Assert.Equal(string.Empty, PathCompletion.CommonPrefix(["a", "b"]));
         Assert.Equal(string.Empty, PathCompletion.CommonPrefix([]));

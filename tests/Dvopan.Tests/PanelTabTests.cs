@@ -205,8 +205,9 @@ public class PanelTabTests
     [Fact]
     public void TheCaptionIsTheFolderNameOrTheRootItself()
     {
-        Assert.Equal("Demo", FilePanel.TabCaption(@"C:\Work\Demo"));
-        Assert.Equal(@"C:\", FilePanel.TabCaption(@"C:\"));
+        string root = OperatingSystem.IsWindows() ? @"C:\" : "/";
+        Assert.Equal("Demo", FilePanel.TabCaption(Path.Combine(root, "Work", "Demo")));
+        Assert.Equal(root, FilePanel.TabCaption(root));
         Assert.Equal(string.Empty, FilePanel.TabCaption(null));
     }
 }
