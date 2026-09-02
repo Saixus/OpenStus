@@ -214,8 +214,8 @@ The first release: a working dual-pane file manager.
 ### Known limitations
 
 - View modes 6 to 9 (descriptions, long descriptions, file owners, links) fall back to Full.
-- The tree panel, the quick view panel and the info panel are not implemented, so `Ctrl+T`, `Ctrl+Q`
-  and the info panel entry are absent rather than stubbed.
+- The tree panel, the quick view panel and the info panel are not implemented, so `Ctrl+Q` and the
+  info panel entry are absent rather than stubbed; `Ctrl+T`, Far's tree panel, opens a tab instead.
 - `Alt+F10` (find folder) reports that it is not implemented in this version.
 - Archives are ordinary files: `Shift+F1`, `Shift+F2` and `Ctrl+PgDn`-into-an-archive do nothing yet.
 - `F11` opens the built-in extras (file search, folder size, compare folders, swap panels) rather than

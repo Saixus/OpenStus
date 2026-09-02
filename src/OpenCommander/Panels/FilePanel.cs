@@ -56,7 +56,6 @@ public sealed class FilePanel : IFilePanel
     // Tabs, each remembering a folder and the way it was being looked at. There is always at least
     // one; the strip is only drawn once there are two, so a single-tab panel looks exactly like Far.
     private readonly List<PanelTab> _tabs = [new PanelTab()];
-    private readonly List<(int X0, int X1, int Index)> _tabHits = [];
     private int _tabIndex;
 
     private List<FileEntry> _entries = [];
@@ -227,7 +226,7 @@ public sealed class FilePanel : IFilePanel
         get
         {
             Rect b = Bounds;
-            if (b.Width < MinWidth || b.Height < MinHeight)
+            if (b.Width < MinWidth || b.Height < RequiredHeight)
             {
                 return 0;
             }
@@ -241,6 +240,9 @@ public sealed class FilePanel : IFilePanel
     /// once there is more than one tab.
     /// </summary>
     private int HeaderRows => _tabs.Count > 1 ? 3 : 2;
+
+    /// <summary>The shortest panel that still gets drawn: <see cref="MinHeight"/> plus the tab strip when there is one.</summary>
+    private int RequiredHeight => MinHeight + HeaderRows - 2;
 
     /// <summary>How many stripes the current view mode and width produce.</summary>
     public int VisibleStripes => LayoutFor(Math.Max(0, Bounds.Width - 2)).Stripes;
@@ -350,6 +352,7 @@ public sealed class FilePanel : IFilePanel
             SortMode = SortMode,
             ReverseSort = ReverseSort,
             ViewMode = _viewMode,
+            Selected = SelectedNames(),
         };
 
         _tabs.Insert(_tabIndex + 1, tab);
@@ -366,7 +369,7 @@ public sealed class FilePanel : IFilePanel
         }
 
         _tabs.RemoveAt(_tabIndex);
-        int next = Math.Min(_tabIndex, _tabs.Count - 1);
+        int next = Math.Max(0, _tabIndex - 1);
         _tabIndex = -1; // nothing to save: the tab being left no longer exists
         SwitchTab(next);
         return true;
@@ -403,8 +406,33 @@ public sealed class FilePanel : IFilePanel
         ReverseSort = tab.ReverseSort;
         _viewMode = PanelViewModes.Normalize(tab.ViewMode);
         Navigate(tab.Path, tab.FocusName);
+
+        // The folder was re-read, so the tags come back by name: fifty tagged files must survive
+        // a glance at another tab.
+        if (tab.Selected.Count > 0)
+        {
+            foreach (FileEntry e in _entries)
+            {
+                e.Selected = !e.IsParent && tab.Selected.Contains(e.Name);
+            }
+        }
+
         _top = tab.TopIndex;
         EnsureVisible();
+    }
+
+    private HashSet<string> SelectedNames()
+    {
+        var names = new HashSet<string>(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+        foreach (FileEntry e in _entries)
+        {
+            if (e.Selected)
+            {
+                names.Add(e.Name);
+            }
+        }
+
+        return names;
     }
 
     /// <summary>The caption a tab shows: the folder's own name, or the root itself for a root.</summary>
@@ -436,6 +464,7 @@ public sealed class FilePanel : IFilePanel
         tab.SortMode = SortMode;
         tab.ReverseSort = ReverseSort;
         tab.ViewMode = _viewMode;
+        tab.Selected = SelectedNames();
     }
 
     /// <summary>Tags or untags every entry matching a mask list.</summary>
@@ -552,7 +581,7 @@ public sealed class FilePanel : IFilePanel
             return;
         }
 
-        if (b.Width < MinWidth || b.Height < MinHeight)
+        if (b.Width < MinWidth || b.Height < RequiredHeight)
         {
             buffer.Fill(b, ' ', Theme.PanelText);
             return;
@@ -759,9 +788,32 @@ public sealed class FilePanel : IFilePanel
     private void DrawTabs(ScreenBuffer buffer, Rect b, CellStyle box)
     {
         int row = b.Y + 1;
+        foreach ((int x0, int x1, int index, string caption) in TabCells(b))
+        {
+            if (x0 > b.X + 1)
+            {
+                buffer.Set(x0 - 1, row, BoxChars.Vertical(InnerFrame), box);
+            }
+
+            CellStyle style = index == _tabIndex ? Theme.PanelTitleActive : Theme.PanelTitle;
+            buffer.WriteFixed(x0, row, x1 - x0, caption, style);
+        }
+    }
+
+    /// <summary>
+    /// Where each visible caption sits on the strip row - computed afresh for drawing and for every
+    /// click alike, so a click that lands in the same input pump as the key that changed the strip
+    /// still hits what is really there.
+    /// </summary>
+    private List<(int X0, int X1, int Index, string Caption)> TabCells(Rect b)
+    {
+        var cells = new List<(int, int, int, string)>();
         int left = b.X + 1;
         int inner = b.Width - 2;
-        _tabHits.Clear();
+        if (inner <= 0)
+        {
+            return cells;
+        }
 
         var captions = new string[_tabs.Count];
         for (int i = 0; i < captions.Length; i++)
@@ -781,8 +833,7 @@ public sealed class FilePanel : IFilePanel
         {
             if (i > first)
             {
-                buffer.Set(x, row, BoxChars.Vertical(InnerFrame), box);
-                x++;
+                x++; // the divider
             }
 
             int width = Math.Min(captions[i].Length, left + inner - x);
@@ -791,11 +842,11 @@ public sealed class FilePanel : IFilePanel
                 break;
             }
 
-            CellStyle style = i == _tabIndex ? Theme.PanelTitleActive : Theme.PanelTitle;
-            buffer.WriteFixed(x, row, width, captions[i], style);
-            _tabHits.Add((x, x + width, i));
+            cells.Add((x, x + width, i, captions[i]));
             x += width;
         }
+
+        return cells;
     }
 
     private static int StripWidth(string[] captions, int first, int last)
@@ -1274,7 +1325,7 @@ public sealed class FilePanel : IFilePanel
         // A click on a tab caption shows that tab.
         if (_tabs.Count > 1 && m.Y == Bounds.Y + 1 && m.Button == MouseButton.Left)
         {
-            foreach ((int x0, int x1, int tab) in _tabHits)
+            foreach ((int x0, int x1, int tab, _) in TabCells(Bounds))
             {
                 if (m.X >= x0 && m.X < x1)
                 {
@@ -1327,7 +1378,7 @@ public sealed class FilePanel : IFilePanel
     public int IndexAt(int screenX, int screenY)
     {
         Rect b = Bounds;
-        if (b.Width < MinWidth || b.Height < MinHeight)
+        if (b.Width < MinWidth || b.Height < RequiredHeight)
         {
             return -1;
         }
@@ -1806,6 +1857,8 @@ public sealed class FilePanel : IFilePanel
         public bool ReverseSort { get; set; }
 
         public PanelViewMode ViewMode { get; set; } = PanelViewModes.Default;
+
+        public HashSet<string> Selected { get; set; } = [];
     }
 
     private static SortMode SortForFunctionKey(ConsoleKey key) => key switch

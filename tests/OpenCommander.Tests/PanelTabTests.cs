@@ -162,6 +162,47 @@ public class PanelTabTests
     }
 
     [Fact]
+    public void TaggedEntriesSurviveATabSwitchAndAreCopiedIntoANewTab()
+    {
+        using var tree = new ShellTree("tabs-tags");
+        using Application app = Build(tree.Root);
+        FilePanel panel = app.LeftFilePanel;
+
+        panel.SelectAllFiles(); // readme.md and notes.txt
+        Assert.Equal(2, panel.Entries.Count(e => e.Selected));
+
+        Press(app, ConsoleKey.T, KeyMods.Ctrl);
+        Assert.Equal(2, panel.Entries.Count(e => e.Selected)); // the copy inherits the tags
+
+        panel.ClearSelection();
+        Press(app, ConsoleKey.Tab, KeyMods.Ctrl, '\t'); // back to the original
+        Assert.Equal(2, panel.Entries.Count(e => e.Selected));
+
+        Press(app, ConsoleKey.Tab, KeyMods.Ctrl, '\t'); // and the copy kept its cleared state
+        Assert.Equal(0, panel.Entries.Count(e => e.Selected));
+    }
+
+    [Fact]
+    public void ClosingAMiddleTabShowsItsLeftNeighbour()
+    {
+        using var tree = new ShellTree("tabs-left");
+        using Application app = Build(tree.Root);
+        FilePanel panel = app.LeftFilePanel;
+        string docs = Path.Combine(tree.Root, "docs");
+        string src = Path.Combine(tree.Root, "src");
+
+        Press(app, ConsoleKey.T, KeyMods.Ctrl);
+        panel.Navigate(docs);
+        Press(app, ConsoleKey.T, KeyMods.Ctrl);
+        panel.Navigate(src);
+        Press(app, ConsoleKey.Tab, KeyMods.Ctrl | KeyMods.Shift, '\t'); // on docs, the middle one
+
+        Press(app, ConsoleKey.W, KeyMods.Ctrl);
+        Assert.Equal([tree.Root, src], panel.TabPaths);
+        Assert.Equal(tree.Root, panel.CurrentPath);
+    }
+
+    [Fact]
     public void TheCaptionIsTheFolderNameOrTheRootItself()
     {
         Assert.Equal("Demo", FilePanel.TabCaption(@"C:\Work\Demo"));
