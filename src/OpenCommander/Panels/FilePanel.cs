@@ -435,6 +435,52 @@ public sealed class FilePanel : IFilePanel
         return names;
     }
 
+    /// <summary>
+    /// Replaces the tabs with a remembered set - one per folder that still exists - and shows the
+    /// one that was showing. Folders that have gone since are dropped quietly; when none is left
+    /// the panel keeps whatever it shows now.
+    /// </summary>
+    /// <param name="paths">The remembered folders, in strip order.</param>
+    /// <param name="active">The index of the tab that was showing.</param>
+    /// <returns>How many tabs were restored.</returns>
+    public int RestoreTabs(IReadOnlyList<string> paths, int active)
+    {
+        ArgumentNullException.ThrowIfNull(paths);
+
+        var surviving = new List<string>();
+        int activeSurviving = 0;
+        for (int i = 0; i < paths.Count; i++)
+        {
+            string path = paths[i];
+            if (string.IsNullOrWhiteSpace(path) || !FileSystemProvider.DirectoryExists(path))
+            {
+                continue;
+            }
+
+            if (i == active)
+            {
+                activeSurviving = surviving.Count;
+            }
+
+            surviving.Add(FileSystemProvider.NormalizeDisplayPath(path));
+        }
+
+        if (surviving.Count == 0)
+        {
+            return 0;
+        }
+
+        _tabs.Clear();
+        foreach (string path in surviving)
+        {
+            _tabs.Add(new PanelTab { Path = path });
+        }
+
+        _tabIndex = -1; // nothing to save: the old tabs are gone
+        SwitchTab(Math.Clamp(activeSurviving, 0, _tabs.Count - 1));
+        return _tabs.Count;
+    }
+
     /// <summary>The caption a tab shows: the folder's own name, or the root itself for a root.</summary>
     /// <param name="path">The tab's folder.</param>
     /// <returns>The caption.</returns>

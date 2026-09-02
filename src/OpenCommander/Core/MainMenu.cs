@@ -165,6 +165,10 @@ public static class MainMenu
             {
                 Checked = s.SyntaxHighlight,
             },
+            new MenuItem("Remember &tabs on exit", null, () => app.ToggleSetting(v => s.RememberTabs = v, s.RememberTabs, reload: false))
+            {
+                Checked = s.RememberTabs,
+            },
             MenuItem.Separator(),
             new MenuItem("Confirm de&lete", null, () => app.ToggleSetting(v => s.ConfirmDelete = v, s.ConfirmDelete, reload: false))
             {

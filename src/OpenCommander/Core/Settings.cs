@@ -110,6 +110,12 @@ public sealed class Settings
     /// <summary>Colour the viewer and editor text by file type (C#, JSON, SQL, ...).</summary>
     public bool SyntaxHighlight { get; set; } = true;
 
+    /// <summary>
+    /// Remember each panel's tabs on exit and open them again next time, unless the command line
+    /// names folders of its own.
+    /// </summary>
+    public bool RememberTabs { get; set; } = true;
+
     /// <summary>Ask before deleting.</summary>
     public bool ConfirmDelete { get; set; } = true;
 

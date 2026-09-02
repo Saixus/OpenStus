@@ -13,7 +13,9 @@ All notable changes to Open Commander are recorded here. The format follows
   Ctrl+Tab for themselves) move between them, and a click on a caption switches. Each tab keeps its
   own folder, cursor, sort order and view mode. The strip - folder names, the shown one in the
   active-title colours - only appears once a panel has two tabs, so a single-tab panel still looks
-  exactly like Far.
+  exactly like Far. The open tabs are remembered on exit (`session.json` beside the settings) and
+  come back next time, focus included, unless the command line names a folder of its own or
+  Options → *Remember tabs on exit* is off; a folder that has gone since is skipped.
 
 - **A command line that behaves like a modern terminal.** It sits on the console's black, as
   Far draws it, and colours what you type as you type it - the command word yellow, options grey,

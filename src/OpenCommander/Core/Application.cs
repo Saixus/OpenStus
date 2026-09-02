@@ -124,6 +124,14 @@ public sealed class Application : IAppContext, IDisposable
 
         var app = new Application(terminal, settings, theme, input);
         app.Initialize(args);
+
+        // The remembered tabs only come back when the command line named no folder of its own:
+        // "oc C:\somewhere" means that folder, whatever was open last time.
+        if (settings.RememberTabs && args.StartPath is null && args.LeftPath is null && args.RightPath is null)
+        {
+            app.RestoreSession(SessionState.Load());
+        }
+
         return app;
     }
 
@@ -546,7 +554,48 @@ public sealed class Application : IAppContext, IDisposable
         }
 
         _history.Save();
+        SaveSession();
         return 0;
+    }
+
+    /// <summary>
+    /// Opens the remembered tabs in both panels and gives the focus back to the panel that had it.
+    /// A <see langword="null"/> or empty session leaves the panels as <see cref="Initialize"/> set
+    /// them up; a folder that no longer exists is skipped.
+    /// </summary>
+    /// <param name="session">The remembered session, or <see langword="null"/> for none.</param>
+    public void RestoreSession(SessionState? session)
+    {
+        if (session is null)
+        {
+            return;
+        }
+
+        _left.RestoreTabs(session.Left.Tabs, session.Left.Active);
+        _right.RestoreTabs(session.Right.Tabs, session.Right.Active);
+        SetActivePanel(session.LeftActive ? _left : _right);
+
+        Layout();
+        SyncWorkingDirectory();
+        _dirty = true;
+    }
+
+    /// <summary>The tabs both panels have open right now, ready to be written for the next run.</summary>
+    /// <returns>The session.</returns>
+    public SessionState CaptureSession() => new()
+    {
+        Left = new PanelSession { Tabs = [.. _left.TabPaths], Active = _left.TabIndex },
+        Right = new PanelSession { Tabs = [.. _right.TabPaths], Active = _right.TabIndex },
+        LeftActive = _leftActive,
+    };
+
+    /// <summary>Writes the open tabs for the next run, when the setting asks for it. Never throws.</summary>
+    private void SaveSession()
+    {
+        if (Settings.RememberTabs)
+        {
+            CaptureSession().Save();
+        }
     }
 
     /// <summary>
@@ -1914,6 +1963,7 @@ public sealed class Application : IAppContext, IDisposable
         string path = OpenCommander.Core.Settings.SettingsFilePath;
         bool ok = Settings.SaveTo(path);
         _history.Save();
+        SaveSession();
 
         _ui.Message(
             "Save setup",
