@@ -277,6 +277,9 @@ generated from `HelpScreen.Bindings`, so they cannot drift apart.
 | `Ctrl+B` | Show or hide the function key bar |
 | `Alt+F1 / Alt+F2` | Change the drive of the left / right panel |
 | `Alt+<letter>` | Quick search by name |
+| `Ctrl+T` | Open a new tab on the current folder |
+| `Ctrl+W` | Close the current tab |
+| `Ctrl+Tab / Ctrl+Shift+Tab` | Next / previous tab (also Ctrl+Alt+Right / Ctrl+Alt+Left) |
 
 ### Selection
 

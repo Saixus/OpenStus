@@ -8,6 +8,13 @@ All notable changes to Open Commander are recorded here. The format follows
 
 ### Added
 
+- **Tabs in the panels.** `Ctrl+T` opens a new tab on the current folder, `Ctrl+W` closes it,
+  `Ctrl+Tab` / `Ctrl+Shift+Tab` (or `Ctrl+Alt+Right` / `Ctrl+Alt+Left`, for terminals that keep
+  Ctrl+Tab for themselves) move between them, and a click on a caption switches. Each tab keeps its
+  own folder, cursor, sort order and view mode. The strip - folder names, the shown one in the
+  active-title colours - only appears once a panel has two tabs, so a single-tab panel still looks
+  exactly like Far.
+
 - **A command line that behaves like a modern terminal.** It sits on the console's black, as
   Far draws it, and colours what you type as you type it - the command word yellow, options grey,
   quoted strings cyan, `%VAR%` / `$var` green. Up and Down walk the history, but only the entries

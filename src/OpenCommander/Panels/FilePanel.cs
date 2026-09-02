@@ -53,6 +53,12 @@ public sealed class FilePanel : IFilePanel
     private readonly PanelHistory _history = new();
     private readonly QuickSearch _quickSearch = new();
 
+    // Tabs, each remembering a folder and the way it was being looked at. There is always at least
+    // one; the strip is only drawn once there are two, so a single-tab panel looks exactly like Far.
+    private readonly List<PanelTab> _tabs = [new PanelTab()];
+    private readonly List<(int X0, int X1, int Index)> _tabHits = [];
+    private int _tabIndex;
+
     private List<FileEntry> _entries = [];
     private PanelColumnLayout? _layoutCache;
     private PanelViewMode _viewMode = PanelViewModes.Default;
@@ -194,6 +200,27 @@ public sealed class FilePanel : IFilePanel
     /// </summary>
     public int TitleReserve { get; set; }
 
+    /// <summary>How many tabs the panel has; never less than one.</summary>
+    public int TabCount => _tabs.Count;
+
+    /// <summary>The index of the tab being shown.</summary>
+    public int TabIndex => _tabIndex;
+
+    /// <summary>The folder each tab is on, the current one included, in strip order.</summary>
+    public IReadOnlyList<string> TabPaths
+    {
+        get
+        {
+            var paths = new string[_tabs.Count];
+            for (int i = 0; i < paths.Length; i++)
+            {
+                paths[i] = i == _tabIndex ? _path : _tabs[i].Path;
+            }
+
+            return paths;
+        }
+    }
+
     /// <summary>How many file rows the panel currently has; zero when it is too short to show any.</summary>
     public int VisibleRows
     {
@@ -205,9 +232,15 @@ public sealed class FilePanel : IFilePanel
                 return 0;
             }
 
-            return Math.Max(0, LastFileRow(b) - (b.Y + 2) + 1);
+            return Math.Max(0, LastFileRow(b) - (b.Y + HeaderRows) + 1);
         }
     }
+
+    /// <summary>
+    /// The rows above the first file row: the top frame and the column titles, plus the tab strip
+    /// once there is more than one tab.
+    /// </summary>
+    private int HeaderRows => _tabs.Count > 1 ? 3 : 2;
 
     /// <summary>How many stripes the current view mode and width produce.</summary>
     public int VisibleStripes => LayoutFor(Math.Max(0, Bounds.Width - 2)).Stripes;
@@ -237,6 +270,7 @@ public sealed class FilePanel : IFilePanel
         }
 
         _path = FileSystemProvider.NormalizeDisplayPath(path);
+        _tabs[_tabIndex].Path = _path;
         _quickSearch.Cancel();
         _shiftSelection = null;
         _top = 0;
@@ -297,6 +331,111 @@ public sealed class FilePanel : IFilePanel
         SortMode = mode;
         ReverseSort = reverse;
         Resort();
+    }
+
+    // ------------------------------------------------------------------- tabs
+
+    /// <summary>
+    /// Opens a new tab on the current folder, right after this one, and switches to it (Ctrl+T).
+    /// The new tab starts with the same sort and view, so it reads as a copy that can wander off.
+    /// </summary>
+    public void OpenTab()
+    {
+        SaveTab();
+        var tab = new PanelTab
+        {
+            Path = _path,
+            FocusName = Current?.Name,
+            TopIndex = _top,
+            SortMode = SortMode,
+            ReverseSort = ReverseSort,
+            ViewMode = _viewMode,
+        };
+
+        _tabs.Insert(_tabIndex + 1, tab);
+        SwitchTab(_tabIndex + 1);
+    }
+
+    /// <summary>Closes the current tab and shows its left neighbour (Ctrl+W); the last tab stays.</summary>
+    /// <returns><see langword="true"/> when a tab was closed.</returns>
+    public bool CloseTab()
+    {
+        if (_tabs.Count <= 1)
+        {
+            return false;
+        }
+
+        _tabs.RemoveAt(_tabIndex);
+        int next = Math.Min(_tabIndex, _tabs.Count - 1);
+        _tabIndex = -1; // nothing to save: the tab being left no longer exists
+        SwitchTab(next);
+        return true;
+    }
+
+    /// <summary>Shows the tab to the right, wrapping round (Ctrl+Tab).</summary>
+    public void NextTab() => SwitchTab((_tabIndex + 1) % _tabs.Count);
+
+    /// <summary>Shows the tab to the left, wrapping round (Ctrl+Shift+Tab).</summary>
+    public void PreviousTab() => SwitchTab((_tabIndex - 1 + _tabs.Count) % _tabs.Count);
+
+    /// <summary>
+    /// Shows one tab: the current one is put away with its folder, cursor, sort and view, and the
+    /// target's are restored - its folder re-read, since it may have changed while out of sight.
+    /// </summary>
+    /// <param name="index">The tab to show; out of range does nothing.</param>
+    public void SwitchTab(int index)
+    {
+        if (index < 0 || index >= _tabs.Count)
+        {
+            return;
+        }
+
+        if (index == _tabIndex)
+        {
+            return;
+        }
+
+        SaveTab();
+        _tabIndex = index;
+
+        PanelTab tab = _tabs[index];
+        SortMode = tab.SortMode;
+        ReverseSort = tab.ReverseSort;
+        _viewMode = PanelViewModes.Normalize(tab.ViewMode);
+        Navigate(tab.Path, tab.FocusName);
+        _top = tab.TopIndex;
+        EnsureVisible();
+    }
+
+    /// <summary>The caption a tab shows: the folder's own name, or the root itself for a root.</summary>
+    /// <param name="path">The tab's folder.</param>
+    /// <returns>The caption.</returns>
+    public static string TabCaption(string? path)
+    {
+        if (string.IsNullOrEmpty(path))
+        {
+            return string.Empty;
+        }
+
+        string trimmed = path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        string leaf = Path.GetFileName(trimmed);
+        return string.IsNullOrEmpty(leaf) ? path : leaf; // a root has no leaf: "C:\" stays "C:\"
+    }
+
+    private void SaveTab()
+    {
+        if ((uint)_tabIndex >= (uint)_tabs.Count)
+        {
+            return;
+        }
+
+        PanelTab tab = _tabs[_tabIndex];
+        tab.Path = _path;
+        tab.FocusName = Current?.Name;
+        tab.TopIndex = _top;
+        tab.SortMode = SortMode;
+        tab.ReverseSort = ReverseSort;
+        tab.ViewMode = _viewMode;
     }
 
     /// <summary>Tags or untags every entry matching a mask list.</summary>
@@ -424,7 +563,8 @@ public sealed class FilePanel : IFilePanel
         int w = b.Width;
         int h = b.Height;
         int inner = w - 2;
-        int firstRow = y + 2;
+        int headerRow = y + HeaderRows - 1;
+        int firstRow = y + HeaderRows;
         int lastRow = LastFileRow(b);
         int rows = Math.Max(0, lastRow - firstRow + 1);
         PanelColumnLayout layout = LayoutFor(inner);
@@ -439,17 +579,22 @@ public sealed class FilePanel : IFilePanel
         DrawFrame(buffer, b, box);
         DrawTitle(buffer, b);
 
+        if (_tabs.Count > 1)
+        {
+            DrawTabs(buffer, b, box);
+        }
+
         char vertical = BoxChars.Vertical(InnerFrame);
         foreach (int sep in layout.Separators)
         {
-            buffer.VLine(x + 1 + sep, y + 1, rows + 1, vertical, box);
+            buffer.VLine(x + 1 + sep, headerRow, rows + 1, vertical, box);
         }
 
         foreach (PanelColumn column in layout.Columns)
         {
             buffer.WriteFixed(
                 x + 1 + column.X,
-                y + 1,
+                headerRow,
                 column.Width,
                 column.Header,
                 Theme.PanelColumnTitle,
@@ -458,7 +603,7 @@ public sealed class FilePanel : IFilePanel
 
         // Far marks the sort mode with a letter in the top-left header cell: lowercase ascending,
         // uppercase descending ("n" = by name, "s" = by size, ...).
-        buffer.Set(x + 1, y + 1, SortIndicator(), Theme.PanelText);
+        buffer.Set(x + 1, headerRow, SortIndicator(), Theme.PanelText);
 
         if (rows > 0)
         {
@@ -603,6 +748,65 @@ public sealed class FilePanel : IFilePanel
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// The tab strip on the row under the top frame: each tab's folder name, the shown one in the
+    /// active-title colours, single dividers between. When the strip is wider than the panel it
+    /// starts as far right as it must for the shown tab to be on screen. The cells each caption
+    /// occupies are remembered for the mouse.
+    /// </summary>
+    private void DrawTabs(ScreenBuffer buffer, Rect b, CellStyle box)
+    {
+        int row = b.Y + 1;
+        int left = b.X + 1;
+        int inner = b.Width - 2;
+        _tabHits.Clear();
+
+        var captions = new string[_tabs.Count];
+        for (int i = 0; i < captions.Length; i++)
+        {
+            captions[i] = " " + TabCaption(i == _tabIndex ? _path : _tabs[i].Path) + " ";
+        }
+
+        // Slide the window right until the shown tab fits.
+        int first = 0;
+        while (first < _tabIndex && StripWidth(captions, first, _tabIndex) > inner)
+        {
+            first++;
+        }
+
+        int x = left;
+        for (int i = first; i < captions.Length && x < left + inner; i++)
+        {
+            if (i > first)
+            {
+                buffer.Set(x, row, BoxChars.Vertical(InnerFrame), box);
+                x++;
+            }
+
+            int width = Math.Min(captions[i].Length, left + inner - x);
+            if (width <= 0)
+            {
+                break;
+            }
+
+            CellStyle style = i == _tabIndex ? Theme.PanelTitleActive : Theme.PanelTitle;
+            buffer.WriteFixed(x, row, width, captions[i], style);
+            _tabHits.Add((x, x + width, i));
+            x += width;
+        }
+    }
+
+    private static int StripWidth(string[] captions, int first, int last)
+    {
+        int width = 0;
+        for (int i = first; i <= last; i++)
+        {
+            width += captions[i].Length + (i > first ? 1 : 0);
+        }
+
+        return width;
     }
 
     private void DrawScrollBar(ScreenBuffer buffer, Rect b, int firstRow, int rows, int page)
@@ -887,6 +1091,8 @@ public sealed class FilePanel : IFilePanel
         bool none = mods == KeyMods.None;
         bool shift = mods == KeyMods.Shift;
         bool ctrl = mods == KeyMods.Ctrl;
+        bool ctrlShift = mods == (KeyMods.Ctrl | KeyMods.Shift);
+        bool ctrlAlt = mods == (KeyMods.Ctrl | KeyMods.Alt);
 
         if (ctrl && (key.Key == ConsoleKey.Oem5 || key.Ch == '\\' || key.Ch == '\u001c'))
         {
@@ -997,6 +1203,26 @@ public sealed class FilePanel : IFilePanel
                 Reload();
                 return true;
 
+            // Tabs. Ctrl+Tab is the usual next-tab key, but Windows Terminal keeps it for its own
+            // tabs, so Ctrl+Alt+Right / Ctrl+Alt+Left do the same job everywhere.
+            case ConsoleKey.T when ctrl:
+                OpenTab();
+                return true;
+
+            case ConsoleKey.W when ctrl:
+                CloseTab();
+                return true;
+
+            case ConsoleKey.Tab when ctrl:
+            case ConsoleKey.RightArrow when ctrlAlt:
+                NextTab();
+                return true;
+
+            case ConsoleKey.Tab when ctrlShift:
+            case ConsoleKey.LeftArrow when ctrlAlt:
+                PreviousTab();
+                return true;
+
             case >= ConsoleKey.D1 and <= ConsoleKey.D9 when ctrl:
                 ViewMode = PanelViewModes.FromNumber(key.Key - ConsoleKey.D0);
                 return true;
@@ -1043,6 +1269,21 @@ public sealed class FilePanel : IFilePanel
         if (m.Kind is not (MouseKind.Down or MouseKind.DoubleClick))
         {
             return false;
+        }
+
+        // A click on a tab caption shows that tab.
+        if (_tabs.Count > 1 && m.Y == Bounds.Y + 1 && m.Button == MouseButton.Left)
+        {
+            foreach ((int x0, int x1, int tab) in _tabHits)
+            {
+                if (m.X >= x0 && m.X < x1)
+                {
+                    SwitchTab(tab);
+                    return true;
+                }
+            }
+
+            return true;
         }
 
         int index = IndexAt(m.X, m.Y);
@@ -1092,7 +1333,7 @@ public sealed class FilePanel : IFilePanel
         }
 
         int rows = VisibleRows;
-        int row = screenY - (b.Y + 2);
+        int row = screenY - (b.Y + HeaderRows);
         if (row < 0 || row >= rows)
         {
             return -1;
@@ -1132,6 +1373,7 @@ public sealed class FilePanel : IFilePanel
     internal void SetEntriesForTest(string path, IReadOnlyList<FileEntry> entries, string? error)
     {
         _path = path ?? string.Empty;
+        _tabs[_tabIndex].Path = _path;
         _entries = entries is null ? [] : [.. entries];
         _error = string.IsNullOrEmpty(error) ? null : error;
         _cursor = 0;
@@ -1548,6 +1790,22 @@ public sealed class FilePanel : IFilePanel
         {
             return string.Empty;
         }
+    }
+
+    /// <summary>One tab: a folder and the way it was being looked at when the user last saw it.</summary>
+    private sealed class PanelTab
+    {
+        public string Path { get; set; } = string.Empty;
+
+        public string? FocusName { get; set; }
+
+        public int TopIndex { get; set; }
+
+        public SortMode SortMode { get; set; } = Files.SortMode.Name;
+
+        public bool ReverseSort { get; set; }
+
+        public PanelViewMode ViewMode { get; set; } = PanelViewModes.Default;
     }
 
     private static SortMode SortForFunctionKey(ConsoleKey key) => key switch

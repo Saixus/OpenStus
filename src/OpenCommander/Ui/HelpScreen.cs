@@ -237,6 +237,9 @@ public sealed class HelpScreen : IScreenComponent
         ("Panels", "Ctrl+B", "Show or hide the function key bar"),
         ("Panels", "Alt+F1 / Alt+F2", "Change the drive of the left / right panel"),
         ("Panels", "Alt+<letter>", "Quick search by name"),
+        ("Panels", "Ctrl+T", "Open a new tab on the current folder"),
+        ("Panels", "Ctrl+W", "Close the current tab"),
+        ("Panels", "Ctrl+Tab / Ctrl+Shift+Tab", "Next / previous tab (also Ctrl+Alt+Right / Ctrl+Alt+Left)"),
 
         ("Selection", "Ins", "Tag the item and move down"),
         ("Selection", "Shift+arrows", "Tag while moving the cursor"),
