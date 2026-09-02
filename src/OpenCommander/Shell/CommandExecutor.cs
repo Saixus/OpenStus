@@ -69,6 +69,14 @@ public static class CommandExecutor
     /// The absolute directory the panel should navigate to when the result is
     /// <see cref="DirectoryChanged"/>; otherwise <see langword="null"/>.
     /// </param>
+    /// <param name="resumeAltScreen">
+    /// Whether to retake the alternate screen once the child exits; <see langword="false"/> keeps
+    /// the user screen up, which is what Ctrl+O wants.
+    /// </param>
+    /// <param name="echo">
+    /// The prompt and command to log on the user screen's bottom row before the child runs, VT
+    /// colour escapes allowed, or <see langword="null"/> to log nothing.
+    /// </param>
     /// <returns>
     /// The child's exit code, <see cref="DirectoryChanged"/> when the command was a <c>cd</c>,
     /// <see cref="CouldNotStart"/> when the shell could not be launched, or <c>0</c> for a blank
@@ -79,7 +87,8 @@ public static class CommandExecutor
         string workingDirectory,
         Terminal terminal,
         out string? changeDirectory,
-        bool resumeAltScreen = true)
+        bool resumeAltScreen = true,
+        string? echo = null)
     {
         ArgumentNullException.ThrowIfNull(terminal);
 
@@ -104,6 +113,15 @@ public static class CommandExecutor
         }
 
         Suspend(terminal);
+
+        // The user screen reads like a terminal session: the prompt and the command on the bottom
+        // row, then a newline so the child's output scrolls up from underneath it. Anchoring on the
+        // bottom row - rather than wherever the primary buffer's cursor was left - is what keeps the
+        // prompt at the bottom when Ctrl+O shows this screen afterwards.
+        if (echo is not null)
+        {
+            terminal.WriteUserScreenLine(echo);
+        }
 
         int exitCode = CouldNotStart;
         try

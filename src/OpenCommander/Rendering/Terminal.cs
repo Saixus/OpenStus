@@ -31,7 +31,8 @@ public sealed class Terminal : IDisposable
     /// <summary>Cheaper to overwrite this many unchanged cells than to emit a cursor move.</summary>
     private const int GapTolerance = 5;
 
-    private const string Esc = "\u001b";
+    /// <summary>The escape character, for the few callers that compose raw VT for the user screen.</summary>
+    internal const string Esc = "\u001b";
     private const string Prologue = Esc + "[?1049h" + Esc + "[?25l" + Esc + "[?7l" + Esc + "[2J" + Esc + "[H";
 
     // End any open synchronized update, turn mouse reporting off, autowrap back on, reset SGR,
@@ -359,6 +360,20 @@ public sealed class Terminal : IDisposable
             _writer.Write(text);
             _writer.Flush();
         }
+    }
+
+    /// <summary>
+    /// Logs one line on the user screen the way a shell prints a prompt: on the bottom row - the
+    /// attributes reset first, so a child that quit with a colour still open cannot paint the
+    /// cleared remainder - then a newline, which scrolls the line up and leaves the cursor on a
+    /// fresh bottom row for whatever prints next. Ignored while the alternate buffer is up.
+    /// </summary>
+    /// <param name="text">The line, VT colour escapes allowed; it is reset at the end.</param>
+    public void WriteUserScreenLine(string text)
+    {
+        WriteUserScreen(
+            Esc + "[" + Height.ToString(System.Globalization.CultureInfo.InvariantCulture) + ";1H" +
+            Esc + "[0m" + Esc + "[K" + text + Esc + "[0m\r\n");
     }
 
     /// <summary>Positions the hardware cursor, applied at the end of the next <see cref="Render"/>.</summary>

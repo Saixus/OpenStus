@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 using OpenCommander.Editor;
 using OpenCommander.Files;
 using OpenCommander.Input;
@@ -843,7 +844,7 @@ public sealed class Application : IAppContext, IDisposable
             return false;
         }
 
-        if (key.Ch is '[' or '\u001b')
+        if (key.Ch is '[' or (char)27)
         {
             InsertPanelPath(left: true);
             return true;
@@ -958,20 +959,24 @@ public sealed class Application : IAppContext, IDisposable
         _history.Add(command);
 
         // With the panels hidden (Ctrl+O) the command runs on the visible user screen and the
-        // shell stays there afterwards, like Far; the echoed prompt line gets a newline first so
-        // the child's output starts under it rather than on it.
+        // shell stays there afterwards, like Far. Either way the user screen logs the prompt and
+        // the command - coloured as the command line drew them - so it reads like a terminal.
         bool stayOnUserScreen = UserScreenActive;
-        if (stayOnUserScreen)
-        {
-            Terminal.WriteUserScreen("\r\n");
-        }
 
         int code = CommandExecutor.Run(
             command,
             ActiveFilePanel.CurrentPath,
             Terminal,
             out string? changeDirectory,
-            resumeAltScreen: !stayOnUserScreen);
+            resumeAltScreen: !stayOnUserScreen,
+            echo: PromptAnsi(command));
+
+        // An internal cd never leaves the panels screen, so the executor logged nothing for it;
+        // on the user screen it still deserves its line in the transcript.
+        if (code == CommandExecutor.DirectoryChanged && stayOnUserScreen)
+        {
+            Terminal.WriteUserScreenLine(PromptAnsi(command));
+        }
 
         if (!string.IsNullOrEmpty(changeDirectory) && FileSystemProvider.DirectoryExists(changeDirectory))
         {
@@ -1765,9 +1770,12 @@ public sealed class Application : IAppContext, IDisposable
     private bool UserScreenActive => PanelsHidden && !Terminal.OnAlternateScreen && !Terminal.IsHeadless;
 
     /// <summary>
-    /// Redraws the prompt line at the bottom of the user screen: carriage return, clear the line,
-    /// the active panel's path, the <c>&gt;</c> and the typed text, with the terminal's own cursor
-    /// walked back to the caret. Raw VT, deliberately outside the cell buffer.
+    /// Redraws the prompt on the bottom row of the user screen - always the bottom row, exactly
+    /// where the command line sits when the panels are up, so Ctrl+O does not make it jump. The
+    /// row is drawn by the command line widget itself into a one-row buffer, so it scrolls,
+    /// truncates, colours and shows the ghost suggestion exactly as on the panels screen, and is
+    /// then shipped as VT with the terminal's cursor placed on the caret. Deliberately outside the
+    /// cell buffer, which must not be flushed while the user screen is up.
     /// </summary>
     private void EchoUserPrompt()
     {
@@ -1779,16 +1787,60 @@ public sealed class Application : IAppContext, IDisposable
             return;
         }
 
-        string text = _commandLine.Text;
-        string line = "\r\u001b[K" + ActiveFilePanel.CurrentPath + CommandLine.PromptSuffix + text;
+        var row = new ScreenBuffer(Math.Max(1, Terminal.Width), 1);
+        _commandLine.Draw(row, 0, ActiveFilePanel.CurrentPath);
 
-        int back = text.Length - _commandLine.Caret;
-        if (back > 0)
+        string bottom = Terminal.Height.ToString(CultureInfo.InvariantCulture);
+        string caret = (_commandLine.CaretX + 1).ToString(CultureInfo.InvariantCulture);
+
+        var line = new StringBuilder(256);
+        line.Append(Terminal.Esc).Append('[').Append(bottom).Append(";1H");
+        line.Append(Terminal.Esc).Append("[0m").Append(Terminal.Esc).Append("[K");
+        line.Append(row.RenderAnsi(Terminal.ColorDepth, Terminal.Palette));
+        line.Append(Terminal.Esc).Append("[0m");
+        line.Append(Terminal.Esc).Append('[').Append(bottom).Append(';').Append(caret).Append('H');
+
+        Terminal.WriteUserScreen(line.ToString());
+    }
+
+    /// <summary>
+    /// The prompt and a command line as VT text: the path and <c>&gt;</c> in the prefix colour,
+    /// then the command coloured token by token exactly as the command line widget draws it - the
+    /// log line each run leaves on the user screen.
+    /// </summary>
+    private string PromptAnsi(string text)
+    {
+        var sb = new StringBuilder(text.Length + 64);
+        ColorDepth depth = Terminal.ColorDepth;
+        Palette palette = Terminal.Palette;
+
+        ScreenBuffer.AppendSgr(sb, Theme.CommandLinePrefix, depth, palette);
+        sb.Append(ActiveFilePanel.CurrentPath).Append(CommandLine.PromptSuffix);
+
+        var tokens = new List<CommandToken>();
+        CommandLineSyntax.Tokenize(text, tokens);
+
+        int at = 0;
+        foreach (CommandToken token in tokens)
         {
-            line += "\u001b[" + back.ToString(CultureInfo.InvariantCulture) + "D";
+            if (token.Start > at)
+            {
+                ScreenBuffer.AppendSgr(sb, Theme.CommandLineText, depth, palette);
+                sb.Append(text, at, token.Start - at);
+            }
+
+            ScreenBuffer.AppendSgr(sb, CommandLine.StyleFor(Theme, token.Kind), depth, palette);
+            sb.Append(text, token.Start, token.Length);
+            at = token.Start + token.Length;
         }
 
-        Terminal.WriteUserScreen(line);
+        if (at < text.Length)
+        {
+            ScreenBuffer.AppendSgr(sb, Theme.CommandLineText, depth, palette);
+            sb.Append(text, at, text.Length - at);
+        }
+
+        return sb.ToString();
     }
 
     /// <summary>Shows or hides the function key bar (Ctrl+B).</summary>

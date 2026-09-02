@@ -382,9 +382,12 @@ generated from `HelpScreen.Bindings`, so they cannot drift apart.
 | `Enter` | Run the command |
 | `Esc` | Clear the line |
 | `Ctrl+Y` | Clear the line |
-| `Ctrl+E / Ctrl+X` | Walk the command history |
+| `Up / Down` | Walk the history of commands starting like the typed text |
+| `Ctrl+E / Ctrl+X` | Walk the whole command history |
+| `Right / End` | Accept the grey suggestion after the caret |
 | `Tab` | Complete the path under the caret |
 | `Ctrl+Left / Ctrl+Right` | Move one word |
+| `Ctrl+Backspace / Ctrl+Del` | Delete one word |
 | `Ctrl+Enter / Ctrl+J` | Insert the name under the cursor |
 | `Ctrl+F` | Insert the full name under the cursor |
 | `cd <path>` | Change the active panel's folder |

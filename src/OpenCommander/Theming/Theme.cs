@@ -142,6 +142,21 @@ public sealed class Theme
     /// <summary>Selected text on the command line.</summary>
     public CellStyle CommandLineSelected { get; set; }
 
+    /// <summary>The command word on the command line - the first word, and the first after a pipe.</summary>
+    public CellStyle CommandLineCommand { get; set; }
+
+    /// <summary>An option on the command line (<c>-v</c>, <c>--all</c>, <c>/s</c>).</summary>
+    public CellStyle CommandLineOption { get; set; }
+
+    /// <summary>A quoted string on the command line.</summary>
+    public CellStyle CommandLineString { get; set; }
+
+    /// <summary>A variable on the command line (<c>$x</c>, <c>%PATH%</c>).</summary>
+    public CellStyle CommandLineVariable { get; set; }
+
+    /// <summary>The ghost completion drawn after the caret, taken from the history.</summary>
+    public CellStyle CommandLineSuggestion { get; set; }
+
     // ---- Horizontal (F9) menu bar ----------------------------------------------------------
 
     /// <summary>Menu bar text.</summary>
@@ -429,24 +444,22 @@ public sealed class Theme
         t.QuickSearch = new CellStyle(black, bCyan);             // no Far entry; follows the B_CYAN idiom
 
         // ---- Screen chrome ------------------------------------------------------------------
-        // COL_COMMANDLINE and COL_COMMANDLINEPREFIX are the sentinel ColorsInit::Default (:114,
-        // :140), which resolves to colors::default_color(): Far deliberately inherits the
-        // terminal's own default pair there so the command line matches the shell it runs. A
-        // CellStyle cannot say "inherit", and this application's stand-in for an untouched console
-        // is CellStyle.Default - which is also what Desktop paints, so the command line now sits
-        // flush on its backdrop instead of floating on a blue strip.
         t.Desktop = CellStyle.Default;                           // no Far entry; the user screen
         t.Clock = new CellStyle(black, bCyan);                   // COL_CLOCK                :115
         t.KeyBarNum = new CellStyle(lightGray, bBlack);          // COL_KEYBARNUM            :111
         t.KeyBarText = new CellStyle(black, bCyan);              // COL_KEYBARTEXT           :112
         t.KeyBarBackground = new CellStyle(lightGray, bBlack);   // COL_KEYBARBACKGROUND     :113
-        // Far's COL_COMMANDLINE is the ColorsInit::Default sentinel, i.e. "inherit the console's
-        // own default pair". On a real Far session that pair resolves to the blue backdrop Far put
-        // there, which is why the command line sits on the same blue as the panels in every Far
-        // screenshot - so blue is what faithfulness means here, not the black of a bare console.
-        // Desktop below stays CellStyle.Default: that one really is the untouched user screen.
-        t.CommandLinePrefix = new CellStyle(lightGray, bBlue);   // COL_COMMANDLINEPREFIX    :140
-        t.CommandLineText = new CellStyle(lightGray, bBlue);     // COL_COMMANDLINE          :114
+        // COL_COMMANDLINE and COL_COMMANDLINEPREFIX (:114, :140) are Far's inherit-the-console
+        // sentinel, and the console is black: the command line is a strip of terminal, light grey
+        // on black, never the panel blue - which is exactly what a Far session shows. The colouring
+        // of the typed command follows the conventions of PSReadLine and fish on the same black.
+        t.CommandLinePrefix = new CellStyle(lightGray, bBlack);       // COL_COMMANDLINEPREFIX    :140
+        t.CommandLineText = new CellStyle(lightGray, bBlack);         // COL_COMMANDLINE          :114
+        t.CommandLineCommand = new CellStyle(yellow, bBlack);         // no Far entry; PSReadLine's Command
+        t.CommandLineOption = new CellStyle(darkGray, bBlack);        // no Far entry; PSReadLine's Parameter
+        t.CommandLineString = new CellStyle(lightCyan, bBlack);       // no Far entry; PSReadLine's String
+        t.CommandLineVariable = new CellStyle(lightGreen, bBlack);    // no Far entry; PSReadLine's Variable
+        t.CommandLineSuggestion = new CellStyle(darkGray, bBlack);    // no Far entry; PSReadLine's InlinePrediction
         t.CommandLineSelected = new CellStyle(black, bCyan);     // COL_COMMANDLINESELECTED  :135
 
         // ---- Horizontal (F9) menu bar - Far's HMenu.* ---------------------------------------
@@ -557,6 +570,11 @@ public sealed class Theme
         new("KeyBarBackground", t => t.KeyBarBackground, (t, v) => t.KeyBarBackground = v),
         new("CommandLinePrefix", t => t.CommandLinePrefix, (t, v) => t.CommandLinePrefix = v),
         new("CommandLineText", t => t.CommandLineText, (t, v) => t.CommandLineText = v),
+        new("CommandLineCommand", t => t.CommandLineCommand, (t, v) => t.CommandLineCommand = v),
+        new("CommandLineOption", t => t.CommandLineOption, (t, v) => t.CommandLineOption = v),
+        new("CommandLineString", t => t.CommandLineString, (t, v) => t.CommandLineString = v),
+        new("CommandLineVariable", t => t.CommandLineVariable, (t, v) => t.CommandLineVariable = v),
+        new("CommandLineSuggestion", t => t.CommandLineSuggestion, (t, v) => t.CommandLineSuggestion = v),
         new("CommandLineSelected", t => t.CommandLineSelected, (t, v) => t.CommandLineSelected = v),
 
         new("MenuBarText", t => t.MenuBarText, (t, v) => t.MenuBarText = v),

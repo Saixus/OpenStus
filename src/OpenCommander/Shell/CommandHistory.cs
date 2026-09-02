@@ -194,15 +194,27 @@ public sealed class CommandHistory
     /// The recalled command, or <see langword="null"/> when the history is empty or the cursor is
     /// already on the oldest entry.
     /// </returns>
-    public string? Previous()
+    public string? Previous() => Previous(string.Empty);
+
+    /// <summary>
+    /// Steps the recall cursor towards the oldest command that starts with
+    /// <paramref name="prefix"/> - the shell habit of typing <c>git</c> and pressing Up to walk
+    /// only the git commands. An empty prefix walks everything.
+    /// </summary>
+    /// <param name="prefix">What the recalled command must start with; compared case-insensitively.</param>
+    /// <returns>The recalled command, or <see langword="null"/> when nothing older matches.</returns>
+    public string? Previous(string? prefix)
     {
-        if (_cursor + 1 >= _entries.Count)
+        for (int i = _cursor + 1; i < _entries.Count; i++)
         {
-            return null;
+            if (Matches(_entries[i], prefix))
+            {
+                _cursor = i;
+                return _entries[i];
+            }
         }
 
-        _cursor++;
-        return _entries[_cursor];
+        return null;
     }
 
     /// <summary>
@@ -212,16 +224,63 @@ public sealed class CommandHistory
     /// The recalled command, or <see langword="null"/> once the cursor has stepped off the newest
     /// entry and back onto the line the user was typing.
     /// </returns>
-    public string? Next()
+    public string? Next() => Next(string.Empty);
+
+    /// <summary>
+    /// Steps the recall cursor towards the newest command that starts with
+    /// <paramref name="prefix"/>; see <see cref="Previous(string?)"/>.
+    /// </summary>
+    /// <param name="prefix">What the recalled command must start with; compared case-insensitively.</param>
+    /// <returns>
+    /// The recalled command, or <see langword="null"/> once the cursor has stepped off the newest
+    /// match and back onto the line the user was typing.
+    /// </returns>
+    public string? Next(string? prefix)
     {
         if (_cursor < 0)
         {
             return null;
         }
 
-        _cursor--;
-        return _cursor < 0 ? null : _entries[_cursor];
+        for (int i = _cursor - 1; i >= 0; i--)
+        {
+            if (Matches(_entries[i], prefix))
+            {
+                _cursor = i;
+                return _entries[i];
+            }
+        }
+
+        _cursor = -1;
+        return null;
     }
+
+    /// <summary>
+    /// The newest command that starts with <paramref name="prefix"/> and goes on past it - what
+    /// the command line shows as a ghost completion while the user types.
+    /// </summary>
+    /// <param name="prefix">The text typed so far.</param>
+    /// <returns>The suggested command, or <see langword="null"/> when nothing qualifies.</returns>
+    public string? Suggest(string? prefix)
+    {
+        if (string.IsNullOrEmpty(prefix))
+        {
+            return null;
+        }
+
+        foreach (string entry in _entries)
+        {
+            if (entry.Length > prefix.Length && Matches(entry, prefix))
+            {
+                return entry;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool Matches(string entry, string? prefix) =>
+        string.IsNullOrEmpty(prefix) || entry.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Puts the recall cursor back on the line the user is typing.</summary>
     public void ResetCursor() => _cursor = -1;

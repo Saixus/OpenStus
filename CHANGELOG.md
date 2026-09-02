@@ -8,6 +8,17 @@ All notable changes to Open Commander are recorded here. The format follows
 
 ### Added
 
+- **A command line that behaves like a modern terminal.** It sits on the console's black, as
+  Far draws it, and colours what you type as you type it - the command word yellow, options grey,
+  quoted strings cyan, `%VAR%` / `$var` green. Up and Down walk the history, but only the entries
+  that start like the typed text (`git` then Up visits only the git commands; Ctrl+E / Ctrl+X still
+  walk everything); the newest matching entry is shown as a grey ghost after the caret and taken
+  with Right or End, one word at a time with Ctrl+Right; Ctrl+Backspace and Ctrl+Delete remove a
+  word. The user screen behind Ctrl+O is anchored the same way: the prompt stays on the bottom row
+  instead of jumping to wherever the last command left the cursor, every command run leaves a
+  coloured `path> command` line above its output so the screen reads like a terminal session, and
+  the ghost suggestion is drawn there too.
+
 - **Syntax highlighting in the viewer and editor.** C#, JavaScript/TypeScript, JSON (with keys
   coloured separately), SQL, C/C++, Java, Python, PowerShell and the `#`-commented shell/config
   family (sh, yaml, toml, .gitignore, ...) are recognised by extension; keywords, strings, numbers,

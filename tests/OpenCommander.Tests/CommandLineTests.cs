@@ -315,8 +315,6 @@ public class CommandLineRoutingTests
     }
 
     [Theory]
-    [InlineData(ConsoleKey.UpArrow)]
-    [InlineData(ConsoleKey.DownArrow)]
     [InlineData(ConsoleKey.PageUp)]
     [InlineData(ConsoleKey.PageDown)]
     [InlineData(ConsoleKey.Insert)]
@@ -511,18 +509,98 @@ public class CommandLineHistoryTests
     }
 
     /// <summary>
-    /// In Far the arrows always move the panel cursor, whatever is typed - the history is walked
-    /// with Ctrl+E and Ctrl+X. A half-typed command must survive an accidental Up untouched.
+    /// With text on the line Up and Down walk the history like a shell's, but only through the
+    /// entries that start like what was typed, and Down past the newest match brings the typed
+    /// text back.
     /// </summary>
     [Fact]
-    public void PlainUpAndDownNeverRecallEvenWithTextOnTheLine()
+    public void UpAndDownWalkOnlyTheEntriesStartingLikeTheTypedText()
     {
-        (CommandLine line, RecordingContext ctx) = New("one", "two");
-        Keys.Type(line, ctx, "half typed");
+        (CommandLine line, RecordingContext ctx) = New("git status", "dir", "git push", "Git pull");
+        Keys.Type(line, ctx, "git");
 
-        Assert.False(line.HandleKey(Keys.Key(ConsoleKey.UpArrow), ctx));
-        Assert.False(line.HandleKey(Keys.Key(ConsoleKey.DownArrow), ctx));
-        Assert.Equal("half typed", line.Text);
+        Assert.True(line.HandleKey(Keys.Key(ConsoleKey.UpArrow), ctx));
+        Assert.Equal("Git pull", line.Text); // newest match first, case-insensitively
+
+        line.HandleKey(Keys.Key(ConsoleKey.UpArrow), ctx);
+        Assert.Equal("git push", line.Text); // "dir" is skipped
+
+        line.HandleKey(Keys.Key(ConsoleKey.UpArrow), ctx);
+        Assert.Equal("git status", line.Text);
+
+        line.HandleKey(Keys.Key(ConsoleKey.UpArrow), ctx);
+        Assert.Equal("git status", line.Text); // nothing older matches
+
+        line.HandleKey(Keys.Key(ConsoleKey.DownArrow), ctx);
+        line.HandleKey(Keys.Key(ConsoleKey.DownArrow), ctx);
+        Assert.Equal("Git pull", line.Text);
+
+        Assert.True(line.HandleKey(Keys.Key(ConsoleKey.DownArrow), ctx));
+        Assert.Equal("git", line.Text); // the half-typed line comes back
+        Assert.Equal(3, line.Caret);
+    }
+
+    [Fact]
+    public void TheGhostSuggestionIsTheNewestLongerMatchAndRightAcceptsIt()
+    {
+        (CommandLine line, RecordingContext ctx) = New("dotnet build", "dotnet test --no-build", "dir");
+
+        Keys.Type(line, ctx, "dot");
+        Assert.Equal("dotnet test --no-build", line.Suggestion);
+
+        // Ctrl+Right takes one word of it, Right the rest.
+        Assert.True(line.HandleKey(Keys.Key(ConsoleKey.RightArrow, KeyMods.Ctrl), ctx));
+        Assert.Equal("dotnet", line.Text);
+        Assert.Equal("dotnet test --no-build", line.Suggestion);
+
+        Assert.True(line.HandleKey(Keys.Key(ConsoleKey.RightArrow), ctx));
+        Assert.Equal("dotnet test --no-build", line.Text);
+        Assert.Equal(line.Text.Length, line.Caret);
+        Assert.Null(line.Suggestion); // nothing longer remains
+    }
+
+    [Fact]
+    public void EndAcceptsTheSuggestionOnlyWhenTheCaretIsAlreadyAtTheEnd()
+    {
+        (CommandLine line, RecordingContext ctx) = New("make clean");
+        Keys.Type(line, ctx, "make");
+
+        line.HandleKey(Keys.Key(ConsoleKey.Home), ctx);
+        Assert.Null(line.Suggestion); // only offered with the caret at the end
+
+        Assert.True(line.HandleKey(Keys.Key(ConsoleKey.End), ctx));
+        Assert.Equal("make", line.Text); // the first End only moves the caret
+
+        Assert.True(line.HandleKey(Keys.Key(ConsoleKey.End), ctx));
+        Assert.Equal("make clean", line.Text);
+    }
+
+    [Fact]
+    public void NoSuggestionWithoutTextOrDuringARecall()
+    {
+        (CommandLine line, RecordingContext ctx) = New("git status", "git push");
+
+        Assert.Null(line.Suggestion);
+
+        Keys.Type(line, ctx, "git");
+        line.HandleKey(Keys.Key(ConsoleKey.UpArrow), ctx);
+        Assert.Equal("git push", line.Text);
+        Assert.Null(line.Suggestion); // a recalled entry is not a prefix to complete
+    }
+
+    [Fact]
+    public void CtrlBackspaceAndCtrlDeleteRemoveAWord()
+    {
+        (CommandLine line, RecordingContext ctx) = New();
+        Keys.Type(line, ctx, "git commit -m");
+
+        Assert.True(line.HandleKey(Keys.Key(ConsoleKey.Backspace, KeyMods.Ctrl), ctx));
+        Assert.Equal("git commit ", line.Text);
+
+        line.HandleKey(Keys.Key(ConsoleKey.Home), ctx);
+        Assert.True(line.HandleKey(Keys.Key(ConsoleKey.Delete, KeyMods.Ctrl), ctx));
+        Assert.Equal("commit ", line.Text);
+        Assert.Equal(0, line.Caret);
     }
 
     /// <summary>
@@ -877,12 +955,13 @@ public class CommandLineDrawTests
         var line = new CommandLine(ctx.Theme, new CommandHistory());
         var buf = new ScreenBuffer(40, 1);
 
-        line.Text = "dir";
+        line.Text = "dir x";
         line.Draw(buf, 0, "C:");
 
         Assert.Equal(ctx.Theme.CommandLinePrefix, buf.Get(0, 0).Style);
         Assert.Equal(ctx.Theme.CommandLinePrefix, buf.Get(2, 0).Style);
-        Assert.Equal(ctx.Theme.CommandLineText, buf.Get(3, 0).Style);
+        Assert.Equal(ctx.Theme.CommandLineCommand, buf.Get(3, 0).Style); // the command word
+        Assert.Equal(ctx.Theme.CommandLineText, buf.Get(7, 0).Style);    // a plain argument
     }
 
     [Fact]
@@ -1394,5 +1473,123 @@ public class HelpScreenTests
         var help = new HelpScreen(Theme.FarDefault());
         Assert.Equal("Quit", help.KeyBarFor(KeyMods.None)![9]);
         Assert.All(help.KeyBarFor(KeyMods.Ctrl)!.Labels, Assert.Empty);
+    }
+}
+
+/// <summary>The colouring of the typed command and the ghost suggestion drawn after it.</summary>
+public class CommandLineColouringTests
+{
+    private static List<CommandToken> Tokens(string text)
+    {
+        var tokens = new List<CommandToken>();
+        CommandLineSyntax.Tokenize(text, tokens);
+        return tokens;
+    }
+
+    private static string Slice(string text, CommandToken t) => text.Substring(t.Start, t.Length);
+
+    [Fact]
+    public void TheCommandOptionsStringsAndVariablesAreEachTheirOwnToken()
+    {
+        const string Line = "git commit -m \"first cut\" --amend %USERNAME% $env:HOME";
+        List<CommandToken> tokens = Tokens(Line);
+
+        Assert.Collection(
+            tokens,
+            t => { Assert.Equal(CommandTokenKind.Command, t.Kind); Assert.Equal("git", Slice(Line, t)); },
+            t => { Assert.Equal(CommandTokenKind.Option, t.Kind); Assert.Equal("-m", Slice(Line, t)); },
+            t => { Assert.Equal(CommandTokenKind.String, t.Kind); Assert.Equal("\"first cut\"", Slice(Line, t)); },
+            t => { Assert.Equal(CommandTokenKind.Option, t.Kind); Assert.Equal("--amend", Slice(Line, t)); },
+            t => { Assert.Equal(CommandTokenKind.Variable, t.Kind); Assert.Equal("%USERNAME%", Slice(Line, t)); },
+            t => { Assert.Equal(CommandTokenKind.Variable, t.Kind); Assert.Equal("$env:HOME", Slice(Line, t)); });
+    }
+
+    [Fact]
+    public void APipeOrAChainStartsANewCommand()
+    {
+        const string Line = "dir /s | findstr x && echo done";
+        List<CommandToken> tokens = Tokens(Line);
+
+        string[] commands = [.. tokens.Where(t => t.Kind == CommandTokenKind.Command).Select(t => Slice(Line, t))];
+        Assert.Equal(["dir", "findstr", "echo"], commands);
+        Assert.Contains(tokens, t => t.Kind == CommandTokenKind.Option && Slice(Line, t) == "/s");
+    }
+
+    [Fact]
+    public void APathIsNotAnOptionAndAQuotedFirstWordIsStillTheCommand()
+    {
+        const string Line = "\"C:\\Program Files\\tool.exe\" /usr/bin/x -";
+        List<CommandToken> tokens = Tokens(Line);
+
+        Assert.Equal(CommandTokenKind.Command, tokens[0].Kind);
+        Assert.Equal("\"C:\\Program Files\\tool.exe\"", Slice(Line, tokens[0]));
+        Assert.DoesNotContain(tokens, t => t.Kind == CommandTokenKind.Option); // neither the path nor the lone dash
+    }
+
+    [Fact]
+    public void TheLineIsDrawnColouredWithTheGhostAfterTheText()
+    {
+        var theme = Theme.FarDefault();
+        var history = new CommandHistory();
+        history.Add("git commit -m \"x\" --amend");
+
+        var ctx = new RecordingContext();
+        var line = new CommandLine(theme, history);
+        Keys.Type(line, ctx, "git commit -m \"x\"");
+
+        var buffer = new ScreenBuffer(80, 1);
+        line.Draw(buffer, 0);
+
+        // With no prefix the prompt is just ">" in column 0; the text starts at column 1.
+        Assert.Equal(theme.CommandLinePrefix, buffer.Get(0, 0).Style);
+        Assert.Equal(theme.CommandLineCommand, buffer.Get(1, 0).Style);   // g
+        Assert.Equal(theme.CommandLineText, buffer.Get(5, 0).Style);      // c of commit
+        Assert.Equal(theme.CommandLineOption, buffer.Get(12, 0).Style);   // -
+        Assert.Equal(theme.CommandLineString, buffer.Get(15, 0).Style);   // "
+
+        // The ghost " --amend" follows the text in the suggestion colour, glyphs included.
+        int ghost = 1 + line.Text.Length;
+        Assert.Equal(' ', buffer.Get(ghost, 0).Ch);
+        Assert.Equal('-', buffer.Get(ghost + 1, 0).Ch);
+        Assert.Equal(theme.CommandLineSuggestion, buffer.Get(ghost + 1, 0).Style);
+
+        // The caret sits at the end of the real text, not after the ghost.
+        Assert.Equal(ghost, line.CaretX);
+    }
+}
+
+/// <summary>Edits that arrive from outside the keyboard end a history walk like any other edit.</summary>
+public class CommandLineRecallResetTests
+{
+    [Fact]
+    public void SettingTheTextEndsTheWalkSoDownCannotUndoIt()
+    {
+        var history = new CommandHistory();
+        history.Add("git status");
+        history.Add("git push");
+
+        var ctx = new RecordingContext();
+        var line = new CommandLine(ctx.Theme, history);
+        Keys.Type(line, ctx, "git");
+        line.HandleKey(Keys.Key(ConsoleKey.UpArrow), ctx);
+        Assert.Equal("git push", line.Text);
+
+        // The Alt+F8 history dialog assigns the pick straight to Text.
+        line.Text = "dir";
+        Assert.True(history.Cursor < 0);
+
+        line.HandleKey(Keys.Key(ConsoleKey.DownArrow), ctx);
+        Assert.Equal("dir", line.Text); // not the stale "git"
+    }
+
+    [Fact]
+    public void ARedirectionAmpersandDoesNotStartANewCommand()
+    {
+        const string Line = "dotnet build 2>&1 | more";
+        var tokens = new List<CommandToken>();
+        CommandLineSyntax.Tokenize(Line, tokens);
+
+        string[] commands = [.. tokens.Where(t => t.Kind == CommandTokenKind.Command).Select(t => Line.Substring(t.Start, t.Length))];
+        Assert.Equal(["dotnet", "more"], commands);
     }
 }

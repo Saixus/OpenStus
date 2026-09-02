@@ -14,13 +14,18 @@ namespace OpenCommander.Ui;
 /// The interesting part of this class is not the editing, it is the routing. In Far the command line
 /// and the panel share a keyboard: an empty command line means the arrow keys, Home, End, PageUp,
 /// PageDown, Insert and every function key belong to the panel, and the moment there is text on the
-/// line the keys that could plausibly edit it - Left, Right, Home, End, Backspace, Delete - switch
-/// sides. Up and Down never switch: they keep moving the panel cursor whatever is typed, and the
-/// history is walked with Ctrl+E and Ctrl+X instead. Shifted keys stay out too - Shift plus the
-/// arrows, Home or End is the panel's select-and-move family - so the caret motions only claim a
-/// key when no modifier is held. <see cref="HandleKey"/> returns <see langword="false"/> for
-/// everything the panel should see, and the application feeds the panel whatever comes back
-/// unhandled.
+/// line the keys that could plausibly edit it - Left, Right, Home, End, Backspace, Delete, and Up
+/// and Down for the history - switch sides. Shifted keys stay out - Shift plus the arrows, Home or
+/// End is the panel's select-and-move family - so the caret motions only claim a key when no
+/// modifier is held. <see cref="HandleKey"/> returns <see langword="false"/> for everything the
+/// panel should see, and the application feeds the panel whatever comes back unhandled.
+/// </para>
+/// <para>
+/// The terminal habits are here too. Up and Down walk only the history entries that start like
+/// the typed text (Ctrl+E and Ctrl+X walk all of it), the newest matching entry is shown greyed
+/// out after the caret and accepted with Right or End - Ctrl+Right takes it one word at a time -
+/// Ctrl+Backspace and Ctrl+Delete remove a word, and the line is coloured as it is typed: the
+/// command word, options, strings and variables each in their own colour.
 /// </para>
 /// <para>
 /// The grey keypad keys are the exception that has to be spelled out: Gray+, Gray- and Gray* are the
@@ -44,6 +49,7 @@ public sealed class CommandLine
 
     private readonly Theme _theme;
     private readonly PathCompletion _completion = new();
+    private readonly List<CommandToken> _tokens = [];
 
     private string _text = string.Empty;
     private int _caret;
@@ -64,11 +70,16 @@ public sealed class CommandLine
         History = history;
     }
 
-    /// <summary>
-    /// The history Ctrl+E and Ctrl+X walk - and Up and Down while the panels are hidden - and that
-    /// Enter appends to.
-    /// </summary>
+    /// <summary>The history Up, Down, Ctrl+E and Ctrl+X walk, and that Enter appends to.</summary>
     public CommandHistory History { get; }
+
+    /// <summary>
+    /// The history entry offered as a ghost completion - the newest one that starts with the typed
+    /// text and goes on past it - or <see langword="null"/>. Only offered while the caret sits at
+    /// the end of a line the user is typing, never in the middle of a recall.
+    /// </summary>
+    public string? Suggestion =>
+        _text.Length > 0 && _caret == _text.Length && History.Cursor < 0 ? History.Suggest(_text) : null;
 
     /// <summary>
     /// The clipboard Shift+Ins and Ctrl+V paste from. Assignable so a test can substitute an
@@ -83,7 +94,10 @@ public sealed class CommandLine
     /// </summary>
     public string Prefix { get; set; } = string.Empty;
 
-    /// <summary>The text on the line. Setting it puts the caret at the end.</summary>
+    /// <summary>
+    /// The text on the line. Setting it puts the caret at the end and, like every other edit, ends
+    /// any history walk in progress - the Alt+F8 pick must not be undone by the next Down.
+    /// </summary>
     public string Text
     {
         get => _text;
@@ -92,6 +106,8 @@ public sealed class CommandLine
             _text = value ?? string.Empty;
             _caret = _text.Length;
             _completion.Reset();
+            History.ResetCursor();
+            _pendingLine = null;
         }
     }
 
@@ -144,9 +160,65 @@ public sealed class CommandLine
             : string.Empty;
 
         buf.WriteFixed(promptWidth, y, textWidth, visible, _theme.CommandLineText);
+        DrawColouring(buf, y, promptWidth, textWidth);
+        DrawSuggestion(buf, y, promptWidth, textWidth);
 
         CaretY = y;
         CaretX = Math.Clamp(promptWidth + (_caret - _scroll), 0, Math.Max(0, width - 1));
+    }
+
+    /// <summary>Recolours the command, options, strings and variables of the visible text.</summary>
+    private void DrawColouring(ScreenBuffer buf, int y, int promptWidth, int textWidth)
+    {
+        _tokens.Clear();
+        CommandLineSyntax.Tokenize(_text, _tokens);
+
+        foreach (CommandToken token in _tokens)
+        {
+            int x0 = Math.Max(0, token.Start - _scroll);
+            int x1 = Math.Min(textWidth, token.Start + token.Length - _scroll);
+            if (x1 > x0)
+            {
+                buf.FillStyle(new Rect(promptWidth + x0, y, x1 - x0, 1), StyleFor(_theme, token.Kind));
+            }
+        }
+    }
+
+    /// <summary>Draws the ghost remainder of <see cref="Suggestion"/> after the typed text.</summary>
+    private void DrawSuggestion(ScreenBuffer buf, int y, int promptWidth, int textWidth)
+    {
+        string? suggestion = Suggestion;
+        if (suggestion is null)
+        {
+            return;
+        }
+
+        int x = _text.Length - _scroll;
+        int room = textWidth - x;
+        if (room <= 0)
+        {
+            return;
+        }
+
+        buf.WriteFixed(promptWidth + x, y, room, suggestion[_text.Length..], _theme.CommandLineSuggestion);
+    }
+
+    /// <summary>The colour a kind of command-line token is drawn in; the shell's user-screen echo uses the same table.</summary>
+    /// <param name="theme">The palette.</param>
+    /// <param name="kind">The token kind.</param>
+    /// <returns>The style.</returns>
+    public static CellStyle StyleFor(Theme theme, CommandTokenKind kind)
+    {
+        ArgumentNullException.ThrowIfNull(theme);
+
+        return kind switch
+        {
+            CommandTokenKind.Command => theme.CommandLineCommand,
+            CommandTokenKind.Option => theme.CommandLineOption,
+            CommandTokenKind.String => theme.CommandLineString,
+            CommandTokenKind.Variable => theme.CommandLineVariable,
+            _ => theme.CommandLineText,
+        };
     }
 
     /// <summary>
@@ -215,10 +287,10 @@ public sealed class CommandLine
                     return true;
 
                 case ConsoleKey.E:
-                    return RecallPrevious();
+                    return RecallPrevious(byPrefix: false);
 
                 case ConsoleKey.X:
-                    return RecallNext();
+                    return RecallNext(byPrefix: false);
 
                 case ConsoleKey.V:
                     Paste();
@@ -229,7 +301,21 @@ public sealed class CommandLine
                     return true;
 
                 case ConsoleKey.RightArrow when !empty:
+                    if (_caret == _text.Length && Suggestion is string byWord)
+                    {
+                        AcceptSuggestion(byWord, wholeLine: false);
+                        return true;
+                    }
+
                     MoveCaret(NextWord(_caret));
+                    return true;
+
+                case ConsoleKey.Backspace when !empty:
+                    DeleteRange(PreviousWord(_caret), _caret);
+                    return true;
+
+                case ConsoleKey.Delete when !empty:
+                    DeleteRange(_caret, NextWord(_caret));
                     return true;
 
                 default:
@@ -309,6 +395,14 @@ public sealed class CommandLine
                     return false;
                 }
 
+                // At the end of the line Right takes the ghost suggestion, as in every shell that
+                // offers one; anywhere else it is just a caret move.
+                if (_caret == _text.Length && Suggestion is string accepted)
+                {
+                    AcceptSuggestion(accepted, wholeLine: true);
+                    return true;
+                }
+
                 MoveCaret(_caret + 1);
                 return true;
 
@@ -327,18 +421,31 @@ public sealed class CommandLine
                     return false;
                 }
 
+                if (_caret == _text.Length && Suggestion is string acceptedAtEnd)
+                {
+                    AcceptSuggestion(acceptedAtEnd, wholeLine: true);
+                    return true;
+                }
+
                 MoveCaret(_text.Length);
                 return true;
+
+            // With text on the line Up and Down walk the history the way a shell does: only the
+            // entries starting like what was typed, the half-typed line coming back at the end.
+            // On an empty line they stay with the panel, which needs them to move its cursor.
+            case ConsoleKey.UpArrow when key.Mods == KeyMods.None:
+                return !empty && RecallPrevious(byPrefix: true);
+
+            case ConsoleKey.DownArrow when key.Mods == KeyMods.None:
+                return !empty && RecallNext(byPrefix: true);
 
             // Shift+Ins pastes, as in every Far edit line; the plain key below stays with the panel.
             case ConsoleKey.Insert when key.Mods == KeyMods.Shift:
                 Paste();
                 return true;
 
-            // Panel navigation and the function keys are never the command line's business. Up and
-            // Down are in that group even with text on the line: in Far they always move the panel
-            // cursor, and the history is recalled with Ctrl+E and Ctrl+X - or through
-            // RecallHistory() while Ctrl+O hides the panels and there is no cursor to move.
+            // Panel navigation and the function keys are never the command line's business; a
+            // shifted Up or Down lands here too and goes to the panel's selection.
             //
             // Gray+, Gray- and Gray* join them: they are select-by-mask, deselect-by-mask and invert
             // selection, and the Windows backend reports them as ConsoleKey.Add/Subtract/Multiply
@@ -374,13 +481,55 @@ public sealed class CommandLine
 
     /// <summary>
     /// Steps through the history regardless of what is on the line. The shell uses this while the
-    /// panels are hidden (Ctrl+O), when Up and Down have no panel cursor to move - with panels
-    /// showing, Up and Down always belong to the panel and the recall keys are Ctrl+E and Ctrl+X,
-    /// as in Far.
+    /// panels are hidden (Ctrl+O), when Up and Down on an empty line have no panel cursor to move.
     /// </summary>
     /// <param name="previous">Whether to step backwards rather than forwards.</param>
     /// <returns>Always <see langword="true"/>; the key is consumed either way.</returns>
-    public bool RecallHistory(bool previous) => previous ? RecallPrevious() : RecallNext();
+    public bool RecallHistory(bool previous) => previous ? RecallPrevious(byPrefix: false) : RecallNext(byPrefix: false);
+
+    /// <summary>
+    /// Takes the ghost suggestion onto the line - all of it, or just its next word.
+    /// </summary>
+    private void AcceptSuggestion(string suggestion, bool wholeLine)
+    {
+        int end = suggestion.Length;
+        if (!wholeLine)
+        {
+            // One word of the remainder: to the end of the next run of non-separators.
+            int i = _text.Length;
+            while (i < suggestion.Length && IsSeparator(suggestion[i]))
+            {
+                i++;
+            }
+
+            while (i < suggestion.Length && !IsSeparator(suggestion[i]))
+            {
+                i++;
+            }
+
+            end = i;
+        }
+
+        _text = suggestion[..end];
+        _caret = _text.Length;
+        _completion.Reset();
+        History.ResetCursor();
+        _pendingLine = null;
+    }
+
+    /// <summary>Removes <c>[from, to)</c> and leaves the caret at <paramref name="from"/>.</summary>
+    private void DeleteRange(int from, int to)
+    {
+        from = Math.Clamp(from, 0, _text.Length);
+        to = Math.Clamp(to, from, _text.Length);
+        if (to == from)
+        {
+            return;
+        }
+
+        _text = _text.Remove(from, to - from);
+        MoveCaret(from);
+    }
 
     /// <summary>Runs the line, remembers it and clears the field.</summary>
     /// <param name="ctx">The application context, or <see langword="null"/> to only edit the history.</param>
@@ -409,6 +558,7 @@ public sealed class CommandLine
 
         _text = text;
         _caret = Math.Clamp(caret, 0, _text.Length);
+        History.ResetCursor();
         _pendingLine = null;
         return true;
     }
@@ -429,12 +579,17 @@ public sealed class CommandLine
         Insert(cut >= 0 ? text[..cut] : text);
     }
 
-    private bool RecallPrevious()
+    /// <summary>
+    /// Steps to an older entry. With <paramref name="byPrefix"/> - the Up key - only entries
+    /// starting like the half-typed line count, so "git" plus Up visits only the git commands;
+    /// without it - Ctrl+E - the whole history is walked.
+    /// </summary>
+    private bool RecallPrevious(bool byPrefix)
     {
         // Remember the half-typed line so stepping back down restores it, exactly like a shell.
         _pendingLine ??= _text;
 
-        string? entry = History.Previous();
+        string? entry = History.Previous(byPrefix ? _pendingLine : string.Empty);
         if (entry is null)
         {
             return true;
@@ -444,9 +599,9 @@ public sealed class CommandLine
         return true;
     }
 
-    private bool RecallNext()
+    private bool RecallNext(bool byPrefix)
     {
-        string? entry = History.Next();
+        string? entry = History.Next(byPrefix ? _pendingLine : string.Empty);
         if (entry is not null)
         {
             SetRecalled(entry);

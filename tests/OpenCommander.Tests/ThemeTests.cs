@@ -45,10 +45,10 @@ public class ThemeDefaultsTests
         Assert.Equal(Style(ConsoleColor.Gray, ConsoleColor.Black), t.KeyBarNum);          // :111
         Assert.Equal(Style(ConsoleColor.Black, ConsoleColor.DarkCyan), t.KeyBarText);     // :112
         Assert.Equal(Style(ConsoleColor.Gray, ConsoleColor.Black), t.KeyBarBackground);   // :113
-        // :140 / :114 are Far's inherit-the-console sentinel, and on a real Far session that
-        // resolves to the blue backdrop Far installed - which is what its screenshots show.
-        Assert.Equal(Style(ConsoleColor.Gray, ConsoleColor.DarkBlue), t.CommandLinePrefix);
-        Assert.Equal(Style(ConsoleColor.Gray, ConsoleColor.DarkBlue), t.CommandLineText);
+        // :140 / :114 are Far's inherit-the-console sentinel: the command line is a strip of the
+        // bare terminal, light grey on black - which is what the user's Far screenshots show.
+        Assert.Equal(Style(ConsoleColor.Gray, ConsoleColor.Black), t.CommandLinePrefix);       // :140
+        Assert.Equal(Style(ConsoleColor.Gray, ConsoleColor.Black), t.CommandLineText);         // :114
         Assert.Equal(Style(ConsoleColor.Black, ConsoleColor.DarkCyan), t.CommandLineSelected); // :135
     }
 
@@ -163,21 +163,23 @@ public class ThemeDefaultsTests
     }
 
     /// <summary>
-    /// COL_COMMANDLINE and COL_COMMANDLINEPREFIX are the sentinel ColorsInit::Default (palette.cpp
-    /// :114 and :140), i.e. "whatever the console's default pair is". Far installs a blue backdrop
-    /// and that sentinel resolves against it, so the command line sits on the same blue as the
-    /// panels - not on the black of a bare console. The desktop, which really is the untouched user
-    /// screen, keeps CellStyle.Default, so the two must NOT be equal.
+    /// The command line is a strip of terminal and sits on the console's black, exactly as Far
+    /// draws it - light grey on black, never on the panel blue - and every colour the typed
+    /// command can take shares that black, so a coloured word never shows up as a coloured box.
     /// </summary>
     [Fact]
-    public void TheCommandLineSitsOnThePanelBackdropNotTheBareConsole()
+    public void TheCommandLineSitsOnTheBlackOfTheTerminal()
     {
         var t = Theme.FarDefault();
-        Assert.Equal(ConsoleColor.DarkBlue, t.CommandLineText.Bg);
-        Assert.Equal(ConsoleColor.DarkBlue, t.CommandLinePrefix.Bg);
-        Assert.Equal(t.PanelText.Bg, t.CommandLineText.Bg);
-        Assert.Equal(CellStyle.Default, t.Desktop);
-        Assert.NotEqual(t.Desktop, t.CommandLineText);
+        Assert.Equal(ConsoleColor.Black, t.CommandLineText.Bg);
+        Assert.Equal(ConsoleColor.Black, t.CommandLinePrefix.Bg);
+        Assert.NotEqual(t.PanelText.Bg, t.CommandLineText.Bg);
+
+        foreach (CellStyle style in new[] { t.CommandLineCommand, t.CommandLineOption, t.CommandLineString, t.CommandLineVariable, t.CommandLineSuggestion })
+        {
+            Assert.Equal(ConsoleColor.Black, style.Bg);
+            Assert.NotEqual(ConsoleColor.Black, style.Fg);
+        }
     }
 
     /// <summary>Far gives Keybar.Num and Keybar.Background the same attribute (:111 and :113).</summary>
@@ -192,8 +194,8 @@ public class ThemeDefaultsTests
     [Fact]
     public void EveryContractMemberIsAddressableAndTheTableIsComplete()
     {
-        Assert.Equal(80, Theme.Slots.Count);
-        Assert.Equal(80, Theme.Slots.Select(s => s.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.Equal(85, Theme.Slots.Count);
+        Assert.Equal(85, Theme.Slots.Select(s => s.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count());
 
         var t = Theme.FarDefault();
         foreach (var slot in Theme.Slots)
