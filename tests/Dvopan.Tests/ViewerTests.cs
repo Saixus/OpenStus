@@ -281,7 +281,7 @@ public class FileViewerRenderTests
         string status = rows[9];
         Assert.Contains("Col 0", status, StringComparison.Ordinal);
 
-        // The whole file is on screen, and Far's percentage tracks the bottom of the viewport.
+        // The whole file is on screen, and the percentage tracks the bottom of the viewport.
         Assert.Contains("100%", status, StringComparison.Ordinal);
         Assert.Contains("UTF-8", status, StringComparison.Ordinal);
         Assert.Contains("LF", status, StringComparison.Ordinal);
@@ -390,8 +390,8 @@ public class FileViewerRenderTests
             viewer.HandleInput(Key(ConsoleKey.DownArrow));
         }
 
-        // Far stops when the last line reaches the bottom row - exactly where Ctrl+End lands -
-        // rather than scrolling on until the screen is blank but for the final line at the top.
+        // Scrolling stops when the last line reaches the bottom row - exactly where Ctrl+End lands -
+        // rather than going on until the screen is blank but for the final line at the top.
         Assert.Equal(viewer.Model!.LastPageOffset(8), viewer.TopOffset);
         Assert.Equal("line004", viewer.RenderToText(40, 10).Split('\n')[1].Trim());
     }
@@ -423,13 +423,13 @@ public class FileViewerRenderTests
         var ui = new FakeUi();
         using var viewer = new FileViewer(Palette, ui, file.Path);
 
-        // Wrap is on by default, matching Far; horizontal scrolling needs it off.
+        // Wrap is on by default; horizontal scrolling needs it off.
         viewer.HandleInput(Key(ConsoleKey.F2));
         viewer.HandleInput(Key(ConsoleKey.RightArrow, KeyMods.Ctrl));
 
         string[] rows = viewer.RenderToText(40, 6).Split('\n');
 
-        // Far overlays a marker on the first column once the text is scrolled off to the left.
+        // A marker overlays the first column once the text is scrolled off to the left.
         Assert.Equal("◄LMNOPQRSTUVWXYZ", rows[1]);
         Assert.Contains("Col 20", rows[5], StringComparison.Ordinal);
     }
@@ -441,7 +441,7 @@ public class FileViewerRenderTests
         var ui = new FakeUi();
         using var viewer = new FileViewer(Palette, ui, file.Path);
 
-        // Far's viewer ships with line wrap enabled; F2 toggles it off.
+        // The viewer ships with line wrap enabled; F2 toggles it off.
         Assert.True(viewer.Wrap);
 
         string[] rows = viewer.RenderToText(20, 8).Split('\n');

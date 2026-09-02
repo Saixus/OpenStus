@@ -1,7 +1,7 @@
 namespace Dvopan.Files;
 
 /// <summary>
-/// The panel sort orders, matching Far's Ctrl+F3..Ctrl+F12 menu.
+/// The panel sort orders behind Ctrl+F3..Ctrl+F12 and the sort menu.
 /// </summary>
 public enum SortMode
 {

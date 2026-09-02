@@ -23,7 +23,7 @@ public static class SizeFormatter
     private static readonly char[] Units = ['B', 'K', 'M', 'G', 'T', 'P'];
 
     /// <summary>
-    /// The compact Far-style size: <c>"0 B"</c>, <c>"999 B"</c>, <c>"1.5 K"</c>, <c>"52.0 G"</c>.
+    /// The compact panel-column size: <c>"0 B"</c>, <c>"999 B"</c>, <c>"1.5 K"</c>, <c>"52.0 G"</c>.
     /// Never wider than <see cref="ShortMaxWidth"/> characters.
     /// </summary>
     /// <remarks>

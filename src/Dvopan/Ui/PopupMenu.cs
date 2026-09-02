@@ -18,8 +18,8 @@ namespace Dvopan.Ui;
 /// <see cref="MenuBar"/> needs.
 /// </para>
 /// <para>
-/// A letter that matches exactly one item's <c>'&amp;'</c> hotkey chooses that item outright, Far
-/// style. Any other letter extends the type-search prefix and only moves the cursor.
+/// A letter that matches exactly one item's <c>'&amp;'</c> hotkey chooses that item outright.
+/// Any other letter extends the type-search prefix and only moves the cursor.
 /// </para>
 /// </remarks>
 public sealed class PopupMenu : IScreenComponent

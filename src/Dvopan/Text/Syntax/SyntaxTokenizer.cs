@@ -608,7 +608,7 @@ public static class SyntaxTokenizer
 
         if (i < n && line[i] == '>')
         {
-            Emit(tokens, i, n - i, TokenKind.Comment); // a block quote recedes, like Far's Colorer
+            Emit(tokens, i, n - i, TokenKind.Comment); // a block quote recedes, coloured like a comment
             return SyntaxState.None;
         }
 

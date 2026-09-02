@@ -9,8 +9,8 @@ namespace Dvopan.Viewer;
 /// </summary>
 /// <remarks>
 /// <para>
-/// A position in the file is a <em>byte offset</em>, never a line number - which is exactly how Far
-/// Manager's viewer works, and the only design that opens a multi-gigabyte log instantly. Moving up
+/// A position in the file is a <em>byte offset</em>, never a line number - the classic console
+/// viewer design, and the only one that opens a multi-gigabyte log instantly. Moving up
 /// or down a line is a bounded scan around the current offset, so memory use is constant no matter
 /// how large the file is and no matter where in it the user jumps.
 /// </para>

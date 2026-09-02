@@ -7,7 +7,7 @@ using Dvopan.Ui.Controls;
 
 namespace Dvopan.Tests;
 
-/// <summary>Shared scaffolding: a fixed-size screen, the Far palette and synthetic input.</summary>
+/// <summary>Shared scaffolding: a fixed-size screen, the classic theme and synthetic input.</summary>
 internal static class Fx
 {
     public const int Width = 80;
@@ -626,7 +626,7 @@ public class EditControlTests
     }
 
     [Fact]
-    public void TheFarClipboardBindingsWorkToo()
+    public void TheShiftInsAndShiftDelClipboardBindingsWorkToo()
     {
         var clipboard = new MemoryClipboard();
         clipboard.SetText("xyz");
@@ -1484,7 +1484,7 @@ public class MenuBarTests
         bar.HandleKey(Fx.Key(ConsoleKey.DownArrow));
         Assert.True(bar.IsMenuOpen);
 
-        // Far closes the entire menu system on one Esc, not just the pull-down.
+        // One Esc closes the entire menu system, not just the pull-down.
         bar.HandleKey(Fx.Key(ConsoleKey.Escape));
 
         Assert.False(bar.IsMenuOpen);

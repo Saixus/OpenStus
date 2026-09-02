@@ -64,7 +64,7 @@ public sealed record Rgb(byte R, byte G, byte B)
 /// In <see cref="ColorDepth.Indexed16"/> this table is unused: the renderer names a slot and the
 /// terminal's own scheme decides how it looks. In <see cref="ColorDepth.TrueColor"/> every
 /// <see cref="CellStyle"/> is resolved through a palette and written as literal RGB, which is what
-/// makes the classic Far Manager look survive whatever theme the terminal is configured with.
+/// makes the classic blue-panel look survive whatever theme the terminal is configured with.
 /// </para>
 /// <para>
 /// A palette is immutable; <see cref="With"/> returns a modified copy.
@@ -152,11 +152,11 @@ public sealed class Palette
     /// The legacy Windows NT console palette, built from the channel values 0, 128, 192 and 255.
     /// </summary>
     /// <remarks>
-    /// This is the table Far Manager installs into the console at startup, and therefore what a
-    /// classic Far screenshot is actually showing. Its blue is an even deeper #000080 and its
-    /// bright cyan a pure #00FFFF, so it is slightly harder still than
+    /// This is the colour table of the Windows console itself before Windows Terminal, and
+    /// therefore what the classic look was actually showing on Windows. Its blue is an even
+    /// deeper #000080 and its bright cyan a pure #00FFFF, so it is slightly harder still than
     /// <see cref="ClassicVga"/> (12.77:1 on the dominant pair). Offered as an alternative for
-    /// anyone chasing byte-exact Far fidelity rather than the DOS look.
+    /// anyone chasing byte-exact Windows-console fidelity rather than the DOS look.
     /// </remarks>
     public static Palette WindowsNt { get; } = new(
         [
@@ -247,11 +247,11 @@ public sealed class Palette
     /// The palette a run uses when nothing else is asked for: <see cref="WindowsNt"/>.
     /// </summary>
     /// <remarks>
-    /// Far Manager installs this table itself at startup - <c>interf.cpp:392</c> calls
-    /// <c>SetPalette()</c>, which pushes <c>colors::default_palette()</c> into the console over
-    /// whatever scheme the terminal came with. Matching Far means matching the table Far installs,
-    /// so the NT values are the default here and <see cref="ClassicVga"/> is the alternative,
-    /// not the other way round.
+    /// Console file managers of the classic era installed this table into the console themselves
+    /// at startup, over whatever scheme the terminal came with, so it is what the classic look was
+    /// actually rendered with. Matching that look means matching the table it was drawn on, so the
+    /// NT values are the default here and <see cref="ClassicVga"/> is the alternative, not the
+    /// other way round.
     /// </remarks>
     public static Palette Default => WindowsNt;
 

@@ -114,8 +114,8 @@ public sealed class FileEntry
     public string BaseName => FileTypeClassifier.BaseNameOf(Name);
 
     /// <summary>
-    /// The attributes rendered in Far's fixed <c>R A S H D</c> order, a dash standing in for each
-    /// attribute that is absent - for example <c>"-A---"</c>. Always five characters.
+    /// The attributes rendered in the classic fixed <c>R A S H D</c> order, a dash standing in
+    /// for each attribute that is absent - for example <c>"-A---"</c>. Always five characters.
     /// </summary>
     public string AttributeString
     {
@@ -157,7 +157,7 @@ public sealed class FileEntry
             // A malformed or inaccessible path: point ".." back at where we already are.
         }
 
-        // Far shows the parent folder's own timestamps on the ".." row, so the status line and the
+        // The ".." row carries the parent folder's own timestamps, so the status line and the
         // date columns read sensibly instead of showing the zero date.
         DateTime written = default;
         DateTime created = default;

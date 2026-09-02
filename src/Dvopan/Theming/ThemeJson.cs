@@ -88,8 +88,9 @@ public sealed partial class ThemeJsonContext : JsonSerializerContext
 /// an array of 16 <c>"#RRGGBB"</c> strings in <see cref="ConsoleColor"/> order.
 /// </description></item>
 /// </list>
-/// Slot names go through <see cref="ThemeColor.TryParseColor"/>, so the Far spellings
-/// (<c>LightCyan</c>, <c>Brown</c>, <c>B_BLUE</c>) and the indices 0-15 all work.
+/// Slot names go through <see cref="ThemeColor.TryParseColor"/>, so the traditional DOS colour
+/// names (<c>LightCyan</c>, <c>Brown</c>), the prefixed forms (<c>B_BLUE</c>) and the indices
+/// 0-15 all work.
 /// </remarks>
 public static class ThemePalette
 {
@@ -102,7 +103,7 @@ public static class ThemePalette
         palette = Normalize(name) switch
         {
             "classicvga" or "vga" or "classic" or "dos" or "ega" or "cga" => Palette.ClassicVga,
-            "windowsnt" or "nt" or "legacy" or "conhost" or "far" or "vintage" => Palette.WindowsNt,
+            "windowsnt" or "nt" or "legacy" or "conhost" or "vintage" => Palette.WindowsNt,
             "campbell" or "windowsterminal" or "terminal" => Palette.Campbell,
             _ => null,
         };
@@ -290,7 +291,7 @@ public static class ThemeColor
 
     /// <summary>
     /// Parses a colour name. Accepts every <see cref="ConsoleColor"/> name (case-insensitively),
-    /// the decimal indices 0-15, and the common aliases used by Far Manager's palette
+    /// the decimal indices 0-15, and the traditional DOS colour names
     /// (<c>Brown</c>, <c>LightGray</c>, <c>LightCyan</c>, ...).
     /// </summary>
     public static bool TryParseColor(string? text, out ConsoleColor color)
@@ -303,7 +304,7 @@ public static class ThemeColor
 
         string lowered = text.Trim().ToLowerInvariant();
 
-        // Far's own palette spells colours C_BLUE / F_LIGHTCYAN / B_BLUE; accept those too.
+        // Colour names are also accepted with a C_, F_ or B_ prefix: C_BLUE, F_LIGHTCYAN, B_BLUE.
         if (lowered.Length > 2 && lowered[1] == '_' && lowered[0] is 'c' or 'f' or 'b')
         {
             lowered = lowered[2..];

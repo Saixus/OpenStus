@@ -241,7 +241,7 @@ public sealed class Application : IAppContext, IDisposable
     /// <summary>
     /// Loads the palette this run resolves its colours through: <c>--palette</c> if given, otherwise
     /// the <see cref="Settings.PalettePath"/> setting, otherwise <see cref="Palette.Default"/> - the
-    /// Windows NT table Far installs for itself. Either source may name a built-in preset
+    /// classic Windows NT console colour table. Either source may name a built-in preset
     /// (<c>nt</c>, <c>vga</c>, <c>campbell</c>) instead of a file. A missing or malformed file falls
     /// back to the built-in one - a broken colour file must never keep you out of your file manager.
     /// </summary>
@@ -519,7 +519,7 @@ public sealed class Application : IAppContext, IDisposable
         }
 
         // The command line keeps the cursor even while the panels are hidden (Ctrl+O): it is still
-        // live there, exactly as in Far.
+        // live there, so typing keeps working on the user screen.
         if (CommandLineRow >= 0)
         {
             Terminal.SetCursor(_commandLine.CaretX, _commandLine.CaretY, true);
@@ -825,7 +825,7 @@ public sealed class Application : IAppContext, IDisposable
     {
         if (_panelsHidden)
         {
-            // Far keeps the command line live while the panels are off: typing edits the line,
+            // The command line stays live while the panels are off: typing edits the line,
             // Enter runs it, and Up/Down walk the history even when the line is empty because
             // there is no panel for them to move. Ctrl+O - through the bindings - and the other
             // global commands still work; everything else is inert and the panels stay hidden.
@@ -868,7 +868,7 @@ public sealed class Application : IAppContext, IDisposable
 
         if (_bindings.TryHandle(key, this) || TryInsertPanelPathChord(key))
         {
-            // A global command ran out from under the search box; Far closes it.
+            // A global command ran out from under the search box; that closes it.
             searchPanel?.Search.Cancel();
             return;
         }
@@ -1014,7 +1014,7 @@ public sealed class Application : IAppContext, IDisposable
         _history.Add(command);
 
         // With the panels hidden (Ctrl+O) the command runs on the visible user screen and the
-        // shell stays there afterwards, like Far. Either way the user screen logs the prompt and
+        // shell stays there afterwards. Either way the user screen logs the prompt and
         // the command - coloured as the command line drew them - so it reads like a terminal.
         bool stayOnUserScreen = UserScreenActive;
 
@@ -1039,7 +1039,7 @@ public sealed class Application : IAppContext, IDisposable
         }
         else if (code == CommandExecutor.DirectoryChanged && !string.IsNullOrEmpty(changeDirectory))
         {
-            // An internal cd whose target is not there must say so, like Far - a silent no-op reads
+            // An internal cd whose target is not there must say so - a silent no-op reads
             // as the key having done nothing.
             _ui.Error("Change folder", "The folder does not exist: " + Shorten(changeDirectory, 60));
         }
@@ -1168,7 +1168,7 @@ public sealed class Application : IAppContext, IDisposable
 
     /// <summary>
     /// Asks for a file name and opens the editor on it (Shift+F4). An existing name opens the file
-    /// itself, exactly as in Far; only a genuinely new name starts an empty document.
+    /// itself rather than a blank copy; only a genuinely new name starts an empty document.
     /// </summary>
     public void EditNewFile()
     {
@@ -1269,8 +1269,8 @@ public sealed class Application : IAppContext, IDisposable
     /// <summary>Deletes the tagged items, or only the one under the cursor (F8, Del / Shift+F8).</summary>
     /// <param name="permanent">When set, the recycle bin is bypassed (Shift+Del).</param>
     /// <param name="currentOnly">
-    /// When set, the selection is ignored and only the item under the cursor is deleted - Far's
-    /// Shift+F8, which unlike Shift+Del still honours the recycle bin setting.
+    /// When set, the selection is ignored and only the item under the cursor is deleted - the
+    /// Shift+F8 chord, which unlike Shift+Del still honours the recycle bin setting.
     /// </param>
     public void DeleteFiles(bool permanent, bool currentOnly = false)
     {
@@ -1302,11 +1302,11 @@ public sealed class Application : IAppContext, IDisposable
             }
         }
 
-        // Far asks a second time, in red, before a folder with content goes: the confirmation
-        // above is about the count, this one is about the recursion. One dialog covers the whole
-        // batch - Far's per-folder All/Skip loop needs per-entry answers the operation engine
-        // does not take yet. Far keeps this question behind its own confirmation switch,
-        // independent of the general one, and so does this.
+        // Ask a second time, in red, before a folder with content goes: the confirmation above is
+        // about the count, this one is about the recursion. One dialog covers the whole batch - a
+        // per-folder All/Skip loop needs per-entry answers the operation engine does not take yet.
+        // The question sits behind its own confirmation switch, independent of the general one,
+        // as the classic orthodox file managers keep it.
         List<FileEntry> nonEmpty = Settings.ConfirmDeleteNonEmptyFolders
             ? [.. sources.Where(IsNonEmptyDirectory)]
             : [];
@@ -1412,7 +1412,7 @@ public sealed class Application : IAppContext, IDisposable
             string label = drive.Label.Length > 0 ? drive.Label : drive.FileSystem;
             string caption = "&" + drive.Letter + "  " + Escape(label);
 
-            // Far's drive menu shows both the capacity and what is left of it.
+            // The drive menu shows both the capacity and what is left of it.
             string right = drive.IsReady
                 ? string.Create(
                     CultureInfo.InvariantCulture,
@@ -1771,8 +1771,8 @@ public sealed class Application : IAppContext, IDisposable
 
     /// <summary>
     /// Hides both panels, or shows them again (Ctrl+O). Hiding reveals the user screen - the
-    /// primary console buffer with the output of every command run so far, which is the whole
-    /// point of the key in Far - and the command line stays live on it: typing edits it, Enter
+    /// primary console buffer with the output of every command that has run, which is the whole
+    /// point of the key - and the command line stays live on it: typing edits it, Enter
     /// runs it, Up and Down walk the history. Only Ctrl+O, a mouse click, or something modal
     /// opening brings the panels back.
     /// </summary>
@@ -1802,8 +1802,8 @@ public sealed class Application : IAppContext, IDisposable
 
     /// <summary>
     /// Puts the panels screen back before anything modal is pumped: a dialog cannot be drawn over
-    /// the user screen without destroying the very output Ctrl+O is showing, so - unlike Far,
-    /// which owns the console buffer cell by cell - opening one ends the hidden state.
+    /// the user screen without destroying the very output Ctrl+O is showing, so - unlike a manager
+    /// that owns the console buffer cell by cell - opening one ends the hidden state.
     /// </summary>
     private void EnsurePanelsScreen()
     {
@@ -2081,7 +2081,7 @@ public sealed class Application : IAppContext, IDisposable
     {
         _ = newName; // the Rename answer would fill this in; the dialog does not offer it yet
 
-        // Far's dialog shows the two files' size and stamp side by side, because that pair is the
+        // The dialog shows the two files' size and stamp side by side, because that pair is the
         // question the user is actually weighing: which copy is newer, and which is bigger.
         return _ui.Message(
             "Warning",
@@ -2140,9 +2140,9 @@ public sealed class Application : IAppContext, IDisposable
 
         if (Settings.ClearSelectionAfterOperation && !result.Cancelled)
         {
-            // Far untags the source panel only; the passive panel's selection is its own and
-            // survives the operation. (Far is finer-grained still - skipped and failed items keep
-            // their tags - but that needs per-entry answers the operation engine does not report.)
+            // Only the source panel is untagged; the passive panel's selection is its own and
+            // survives the operation. (A finer-grained rule - skipped and failed items keep their
+            // tags - needs per-entry answers the operation engine does not report.)
             ActiveFilePanel.ClearSelection();
         }
 

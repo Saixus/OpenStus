@@ -9,8 +9,8 @@ namespace Dvopan.Ui;
 /// warning palette so no drawing code has to branch on <c>warning</c>.
 /// </summary>
 /// <remarks>
-/// The Far palette has no warning variants for the edit and list colours, so those fall back to the
-/// normal dialog entries - which is exactly what Far does: an edit field inside a red warning box is
+/// The palette has no warning variants for the edit and list colours, so those fall back to the
+/// normal dialog entries, keeping the classic look: an edit field inside a red warning box is
 /// still black on cyan.
 /// </remarks>
 public sealed class DialogPalette
@@ -198,7 +198,7 @@ public abstract class DialogControl
     /// <summary>
     /// Called by the owning dialog whenever the focus lands on this control after having been
     /// elsewhere. The base implementation does nothing; an edit field selects its whole text
-    /// here, Far style.
+    /// here.
     /// </summary>
     protected internal virtual void OnFocusEntered()
     {

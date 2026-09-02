@@ -5,7 +5,7 @@ using System.Runtime.CompilerServices;
 namespace Dvopan.Panels;
 
 /// <summary>
-/// The panel view modes, numbered exactly like Far's Ctrl+1..Ctrl+9 accelerators.
+/// The panel view modes, numbered after their Ctrl+1..Ctrl+9 accelerators.
 /// </summary>
 /// <remarks>
 /// Modes 6..9 have no data source yet (descriptions, owners and link counts all need information the

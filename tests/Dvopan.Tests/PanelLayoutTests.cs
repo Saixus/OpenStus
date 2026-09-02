@@ -162,7 +162,7 @@ public class PanelColumnLayoutFieldTests
     [Fact]
     public void WideIsASingleStripeOfAWideNameAndSize()
     {
-        // Far's mode 4 is one stripe of N,S: the mode is called Wide for the name column's sake,
+        // Mode 4 is one stripe of N,S: the mode is called Wide for the name column's sake,
         // not because the pair repeats.
         var layout = PanelColumnLayout.Compute(PanelViewMode.Wide, 38);
 

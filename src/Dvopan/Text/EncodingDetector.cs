@@ -41,7 +41,7 @@ public static class EncodingDetector
 
     /// <summary>
     /// The single byte encoding used for files that are not valid UTF-8: the operating system ANSI
-    /// code page on Windows - which is what Far decodes legacy files with - or Latin-1 when that
+    /// code page on Windows - the page legacy DOS-era files were written in - or Latin-1 when that
     /// page is unavailable or not single byte.
     /// </summary>
     /// <remarks>

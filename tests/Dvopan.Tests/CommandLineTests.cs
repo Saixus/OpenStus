@@ -330,7 +330,7 @@ public class CommandLineRoutingTests
     }
 
     /// <summary>
-    /// Shift plus a motion key is the panel's select-and-move family in Far, so the command line
+    /// Shift plus a motion key is the panel's select-and-move family, so the command line
     /// must not treat the chord as an unshifted caret motion - or, worse, a history recall - even
     /// with a command half typed.
     /// </summary>
@@ -1036,7 +1036,7 @@ public class TryParseCdTests
         Assert.False(CommandExecutor.TryParseCd("   ", Base, out _));
     }
 
-    /// <summary>The no-space cmd spellings all work, exactly as in cmd.exe and Far.</summary>
+    /// <summary>The no-space cmd spellings all work, exactly as in cmd.exe.</summary>
     [Fact]
     public void TheCompactSpellingsAreStillACd()
     {

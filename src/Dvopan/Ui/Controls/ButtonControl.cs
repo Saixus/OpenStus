@@ -5,8 +5,8 @@ using Dvopan.Rendering;
 namespace Dvopan.Ui.Controls;
 
 /// <summary>
-/// A push button, rendered Far style as <c>[ Ok ]</c> with the hotkey letter highlighted. The
-/// focused button is painted in the selected-button colours.
+/// A push button, rendered in the classic console style as <c>[ Ok ]</c> with the hotkey letter
+/// highlighted. The focused button is painted in the selected-button colours.
 /// </summary>
 /// <remarks>
 /// Pressing the button runs <see cref="OnClick"/> and then, unless <see cref="Result"/> is

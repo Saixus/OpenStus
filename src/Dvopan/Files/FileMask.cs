@@ -12,8 +12,8 @@ namespace Dvopan.Files;
 /// A mask supports <c>*</c> (any run of characters), <c>?</c> (exactly one character) and character
 /// classes - <c>[abc]</c>, <c>[a-z]</c>, and <c>[!a-z]</c> or <c>[^a-z]</c> to negate. A mask list
 /// separates masks with commas or semicolons, and an item starting with <c>!</c> excludes rather
-/// than includes, so <c>"*.cs,!Generated*"</c> means "C# sources, but nothing generated". Far's
-/// own exclude spelling works too: everything after a <c>|</c> is an exclude list, so
+/// than includes, so <c>"*.cs,!Generated*"</c> means "C# sources, but nothing generated". The
+/// classic bar spelling works too: everything after a <c>|</c> is an exclude list, so
 /// <c>"*.cs|*.g.cs"</c> means "C# sources except the generated ones", and an empty include half -
 /// <c>"|*.bak"</c> - includes everything the excludes leave alone.
 /// </para>
@@ -63,8 +63,8 @@ public static class FileMask
             return false;
         }
 
-        // "*.*" is the DOS spelling of "everything", and Far keeps it that way - it matches names
-        // without a dot too.
+        // "*.*" is the DOS spelling of "everything", and it keeps that meaning here - it matches
+        // names without a dot too.
         if (trimmed is "*" or "*.*")
         {
             return true;
@@ -91,7 +91,7 @@ public static class FileMask
     /// An empty list matches everything - there is nothing to filter by. An excluded name is
     /// rejected whatever else matches, and a list holding only exclusions matches every name they do
     /// not cover. Exclusions come in two spellings that mix freely: a <c>!</c> prefix on an item,
-    /// and - Far's own syntax - everything after the first <c>|</c>.
+    /// and - the classic orthodox-file-manager syntax - everything after the first <c>|</c>.
     /// </remarks>
     /// <param name="name">The file name to test.</param>
     /// <param name="maskList">The comma or semicolon separated list, optionally followed by
@@ -105,8 +105,8 @@ public static class FileMask
             return false;
         }
 
-        // Far writes excludes after a '|' - "*.cs|*.g.cs" - so the list splits into an include
-        // half and an exclude half before anything else. Only the first '|' separates; there is
+        // The bar spelling puts excludes after a '|' - "*.cs|*.g.cs" - so the list splits into an
+        // include half and an exclude half before anything else. Only the first '|' separates; there is
         // no third section, and a '|' inside a [...] character class is one of the class's own
         // members, not the separator.
         string? includeHalf = maskList;
@@ -131,7 +131,7 @@ public static class FileMask
         IReadOnlyList<string> items = SplitList(includeHalf);
         if (items.Count == 0)
         {
-            // An empty include half reads "everything except" - Far's "|*.bak" - and an empty
+            // An empty include half reads "everything except" - as in "|*.bak" - and an empty
             // list has nothing to filter by at all.
             return true;
         }

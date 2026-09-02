@@ -9,12 +9,12 @@ namespace Dvopan.Input;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The notation follows Far Manager: modifiers are written in Ctrl, Alt, Shift order and joined with
-/// <c>'+'</c>, and the numeric keypad keys are spelled <c>Gray+</c>, <c>Gray-</c>, <c>Gray*</c>,
-/// <c>Gray/</c> and <c>Gray.</c>. Parsing is case-insensitive and accepts a number of aliases
-/// (<c>Escape</c>/<c>Esc</c>, <c>Insert</c>/<c>Ins</c>, <c>PageDown</c>/<c>PgDn</c>, …), but
-/// <see cref="ToString"/> always produces the canonical spelling, so
-/// <c>KeyChord.Parse(s).ToString()</c> is idempotent.
+/// The notation is the classic orthodox-file-manager one: modifiers are written in Ctrl, Alt, Shift
+/// order and joined with <c>'+'</c>, and the numeric keypad keys are spelled <c>Gray+</c>,
+/// <c>Gray-</c>, <c>Gray*</c>, <c>Gray/</c> and <c>Gray.</c>. Parsing is case-insensitive and
+/// accepts a number of aliases (<c>Escape</c>/<c>Esc</c>, <c>Insert</c>/<c>Ins</c>,
+/// <c>PageDown</c>/<c>PgDn</c>, …), but <see cref="ToString"/> always produces the canonical
+/// spelling, so <c>KeyChord.Parse(s).ToString()</c> is idempotent.
 /// </para>
 /// <para>
 /// Matching is an exact modifier comparison: <c>"Enter"</c> does not match Shift+Enter.
@@ -140,7 +140,7 @@ public readonly record struct KeyChord(ConsoleKey Key, KeyMods Mods)
     /// <returns>The equivalent key event.</returns>
     public KeyEvent ToKeyEvent() => new(Key, '\0', Mods);
 
-    /// <summary>Renders the chord in canonical Far notation, for example <c>"Ctrl+Alt+F5"</c>.</summary>
+    /// <summary>Renders the chord in the canonical key notation, for example <c>"Ctrl+Alt+F5"</c>.</summary>
     /// <returns>The chord text.</returns>
     public override string ToString() => KeyNames.Format(Key, '\0', Mods);
 }

@@ -6,15 +6,15 @@ using Dvopan.Theming;
 namespace Dvopan.Ui;
 
 /// <summary>
-/// Far's F9 pull-down system: a full-width bar on the top row carrying the top-level titles, with
+/// The F9 pull-down menu: a full-width bar on the top row carrying the top-level titles, with
 /// one <see cref="PopupMenu"/> hanging below whichever title is open.
 /// </summary>
 /// <remarks>
 /// <para>
 /// Left and Right walk the titles - and, when a pull-down is open, close it and open the neighbour,
-/// so holding Right sweeps through the whole menu system exactly like Far. Down or Enter opens the
+/// so holding Right sweeps through every pull-down in turn. Down or Enter opens the
 /// selected pull-down, and a single Esc dismisses the whole menu system whether or not a pull-down
-/// is open - the bar-only state exists only between F9 and the first pull-down, as in Far.
+/// is open - the bar-only state exists only between F9 and the first pull-down.
 /// </para>
 /// <para>
 /// The bar reports the chosen leaf through <see cref="ChosenItem"/>. <see cref="RunModal"/> is the
@@ -332,7 +332,7 @@ public sealed class MenuBar : IScreenComponent
 
         if (popup.Result < 0)
         {
-            // Esc (or a click elsewhere) inside the pull-down: Far dismisses the whole menu
+            // Esc (or a click elsewhere) inside the pull-down dismisses the whole menu
             // system in one go, never dropping back to a bare bar.
             Close();
             return;

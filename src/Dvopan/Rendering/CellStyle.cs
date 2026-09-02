@@ -2,7 +2,7 @@ namespace Dvopan.Rendering;
 
 /// <summary>
 /// A foreground/background colour pair. Dvopan uses the classic 16 colour console
-/// palette throughout, exactly like Far Manager, so a style is just two
+/// palette throughout, like every classic console UI, so a style is just two
 /// <see cref="ConsoleColor"/> values.
 /// </summary>
 /// <param name="Fg">Foreground (text) colour.</param>

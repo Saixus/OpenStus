@@ -11,8 +11,8 @@ namespace Dvopan.Ui;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The interesting part of this class is not the editing, it is the routing. In Far the command line
-/// and the panel share a keyboard: an empty command line means the arrow keys, Home, End, PageUp,
+/// The interesting part of this class is not the editing, it is the routing. The command line and
+/// the panel share a keyboard: an empty command line means the arrow keys, Home, End, PageUp,
 /// PageDown, Insert and every function key belong to the panel, and the moment there is text on the
 /// line the keys that could plausibly edit it - Left, Right, Home, End, Backspace, Delete, and Up
 /// and Down for the history - switch sides. Shifted keys stay out - Shift plus the arrows, Home or
@@ -29,7 +29,7 @@ namespace Dvopan.Ui;
 /// </para>
 /// <para>
 /// The grey keypad keys are the exception that has to be spelled out: Gray+, Gray- and Gray* are the
-/// panel's selection commands in Far whether or not a command is half typed, so they are handed over
+/// panel's selection commands whether or not a command is half typed, so they are handed over
 /// even though the Windows backend delivers them carrying a printable character. Gray/ is not in that
 /// group - the panel does nothing with it and a slash has to stay typeable into a path.
 /// </para>
@@ -350,7 +350,7 @@ public sealed class CommandLine
                     return true;
 
                 // Ctrl+R searches the history when there is text to search with; on an empty line
-                // it stays Far's re-read of the panel (the shell starts a search there itself while
+                // it stays the panel's re-read command (the shell starts a search there itself while
                 // Ctrl+O hides the panels, when there is no panel to re-read).
                 case ConsoleKey.R when !empty:
                     StartReverseSearch();
@@ -509,7 +509,7 @@ public sealed class CommandLine
             case ConsoleKey.DownArrow when key.Mods == KeyMods.None:
                 return !empty && RecallNext(byPrefix: true);
 
-            // Shift+Ins pastes, as in every Far edit line; the plain key below stays with the panel.
+            // Shift+Ins pastes, as in every edit field; the plain key below stays with the panel.
             case ConsoleKey.Insert when key.Mods == KeyMods.Shift:
                 Paste();
                 return true;
@@ -782,7 +782,7 @@ public sealed class CommandLine
     }
 
     /// <summary>
-    /// Inserts the clipboard text at the caret (Shift+Ins and Ctrl+V, as in Far). The command line
+    /// Inserts the clipboard text at the caret (Shift+Ins as well as Ctrl+V). The command line
     /// is a single-line field, so everything from the first line break on is dropped.
     /// </summary>
     private void Paste()
@@ -876,7 +876,7 @@ public sealed class CommandLine
         _scroll = Math.Clamp(_scroll, 0, maxScroll);
     }
 
-    /// <summary>The caret position one word to the left, Far style: skip separators, then the word.</summary>
+    /// <summary>The caret position one word to the left: skip separators, then the word.</summary>
     private int PreviousWord(int from)
     {
         int i = Math.Clamp(from, 0, _text.Length);

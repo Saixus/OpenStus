@@ -147,7 +147,7 @@ public class PanelDrawTests
 
         Assert.Equal(PanelFixture.Height, lines.Length);
 
-        // Far's outer frame is double.
+        // The outer frame is double.
         Assert.Equal('╔', lines[0][0]);
         Assert.Equal('╗', lines[0][39]);
 
@@ -172,7 +172,7 @@ public class PanelDrawTests
     {
         string[] lines = PanelFixture.Render(PanelFixture.Panel());
 
-        // Far keeps the ║ edges running through the status row down to the bottom corners; only
+        // The ║ edges keep running through the status row down to the bottom corners; only
         // the ╟──╢ separator above it is single.
         Assert.Equal('║', lines[18][0]);
         Assert.Equal('║', lines[18][39]);
@@ -294,7 +294,7 @@ public class PanelDrawTests
 
         PanelFixture.Render(panel, out ScreenBuffer buffer);
 
-        // The frame, then the name at once - no padding, the same as the file rows in Far.
+        // The frame, then the name at once - no padding, the same as the file rows above.
         Assert.Equal('║', buffer.Get(0, 18).Ch);
         Assert.Equal('n', buffer.Get(1, 18).Ch);
     }
@@ -314,7 +314,7 @@ public class PanelDrawTests
         for (int i = 0; i < entries.Length; i++)
         {
             // Both the status line and the Size column show the same bare word - no angle
-            // brackets, exactly as Far draws it - so the two readings can never drift apart.
+            // brackets - so the two readings can never drift apart.
             string status = FilePanel.StatusRightText(entries[i]);
             Assert.StartsWith(expected[i] + "  ", status, StringComparison.Ordinal);
             Assert.Equal(expected[i], FilePanel.CellText(entries[i], PanelColumnKind.Size));
@@ -361,8 +361,8 @@ public class PanelDrawTests
         Assert.Contains(" Selected: 2.0 K, files: 1, folders: 1 ", lines[19], StringComparison.Ordinal);
         Assert.DoesNotContain("Bytes:", lines[19], StringComparison.Ordinal);
 
-        // Far paints the selection totals yellow (COL_PANELSELECTEDINFO), so the tagging shows at
-        // the bottom of the panel as well as on the names.
+        // The selection totals are painted yellow, so the tagging shows at the bottom of the
+        // panel as well as on the names.
         int start = buffer.RenderPlainText().Split('\n')[19].IndexOf("Selected", StringComparison.Ordinal);
         Assert.Equal(Theme.Classic().PanelSelectedTotals, buffer.Get(start, 19).Style);
     }
@@ -829,7 +829,7 @@ public class PanelNavigationTests
     }
 
     [Fact]
-    public void TheUnmodifiedKeyBarIsTheFarOne()
+    public void TheUnmodifiedKeyBarHasTheClassicLabels()
     {
         var panel = Panel(1);
 
@@ -1011,9 +1011,9 @@ public class PanelSelectionTests
     }
 
     /// <summary>
-    /// A hidden or system folder must be dimmed, not painted the bright directory white. Far shows
-    /// $Recycle.Bin, ProgramData and System Volume Information dim even though all three are
-    /// folders; ranking directory above hidden made every .git and .vs shout in white instead.
+    /// A hidden or system folder must be dimmed, not painted the bright directory white: a drive
+    /// root's $Recycle.Bin, ProgramData and System Volume Information stay dim even though all three
+    /// are folders; ranking directory above hidden made every .git and .vs shout in white instead.
     /// </summary>
     [Fact]
     public void HiddenOutranksDirectoryWhenColouringAnEntry()
@@ -1193,7 +1193,7 @@ public class PanelQuickSearchTests
         panel.HandleKey(PanelFixture.Key(ConsoleKey.N, KeyMods.Alt, 'n'), null!);
         Assert.True(panel.Search.IsActive);
 
-        // Far keeps the box open however long the user thinks: there is no idle timeout, and Enter
+        // The box stays open however long the user thinks: there is no idle timeout, and Enter
         // closes the box without activating the entry under the cursor.
         Assert.True(panel.HandleKey(PanelFixture.Key(ConsoleKey.Enter, KeyMods.None, '\r'), null!));
         Assert.False(panel.Search.IsActive);

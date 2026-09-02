@@ -9,7 +9,7 @@ namespace Dvopan.Ui.Controls;
 /// <c>'&amp;'</c> hotkey.
 /// </summary>
 /// <remarks>
-/// The group is a single focus stop, exactly like Far's radio button clusters: Tab leaves the group
+/// The group is a single focus stop, as radio clusters in classic dialogs are: Tab leaves the group
 /// rather than stepping through the options.
 /// </remarks>
 public sealed class RadioGroupControl : DialogControl

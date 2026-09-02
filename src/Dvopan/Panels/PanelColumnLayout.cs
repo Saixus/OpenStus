@@ -186,7 +186,7 @@ public sealed class PanelColumnLayout
     /// <param name="mode">The view mode.</param>
     /// <returns>The stripe count.</returns>
     /// <remarks>
-    /// Wide is a single stripe: Far's mode 4 is called Wide because its <em>name column</em> is
+    /// Wide is a single stripe: mode 4 is called Wide because its <em>name column</em> is
     /// wide - one column of names with a size beside it - not because the panel repeats it.
     /// </remarks>
     public static int StripesOf(PanelViewMode mode) => PanelViewModes.Effective(mode) switch

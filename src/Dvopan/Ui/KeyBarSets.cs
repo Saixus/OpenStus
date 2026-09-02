@@ -9,9 +9,9 @@ namespace Dvopan.Ui;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Far stores these as eight consecutive blocks of twelve strings in its language file, one block
-/// per modifier combination, and swaps the visible block as the user presses and releases Shift,
-/// Ctrl and Alt. This type is that table, transcribed for the panel ("shell") area.
+/// Classic orthodox file managers keep these as eight blocks of twelve captions, one block per
+/// modifier combination, and swap the visible block as the user presses and releases Shift, Ctrl
+/// and Alt. This type is that table for the panel ("shell") area.
 /// </para>
 /// <para>
 /// Captions are kept to at most <see cref="MaxCaptionLength"/> characters, which is what lets the
@@ -35,13 +35,13 @@ namespace Dvopan.Ui;
 public static class KeyBarSets
 {
     /// <summary>
-    /// The longest caption the table is allowed to contain. Far's own language template caps the
-    /// captions at six characters; one more is allowed here so that a caption with a trailing
-    /// ellipsis still fits.
+    /// The longest caption the table is allowed to contain. Six characters is the traditional
+    /// caption width of the twelve-cell bar; one more is allowed here so that a caption with a
+    /// trailing ellipsis still fits.
     /// </summary>
     public const int MaxCaptionLength = 7;
 
-    /// <summary>The ellipsis Far 3.0 appends to captions that open a dialog.</summary>
+    /// <summary>The ellipsis appended to captions that open a dialog.</summary>
     private const string Dots = "…";
 
     /// <summary>No modifier: the row the reference screenshot shows.</summary>

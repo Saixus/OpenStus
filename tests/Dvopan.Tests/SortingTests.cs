@@ -199,7 +199,7 @@ public class FileEntryComparerTests
     {
         FileEntry[] entries = [Dir("bin"), Dir("archive.old"), File("z.aaa"), File("a.zip")];
 
-        // Far's default: a folder named "archive.old" is not an "old" file, so directories
+        // The classic default: a folder named "archive.old" is not an "old" file, so directories
         // order purely by name among themselves.
         Assert.Equal(["archive.old", "bin", "z.aaa", "a.zip"], Order(Comparer(SortMode.Extension), entries));
 

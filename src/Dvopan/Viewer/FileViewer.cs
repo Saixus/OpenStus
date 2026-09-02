@@ -9,8 +9,8 @@ using Dvopan.Theming;
 namespace Dvopan.Viewer;
 
 /// <summary>
-/// Far Manager's F3 viewer: a read-only, full screen window over a file of any size, in either text
-/// or hex mode.
+/// The F3 viewer: a read-only, full screen window over a file of any size, in either text or hex
+/// mode.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -136,13 +136,13 @@ public sealed class FileViewer : IScreenComponent, IDisposable
     /// <summary>The underlying byte reader, or <see langword="null"/> when the file failed to open.</summary>
     public ViewerModel? Model => _model;
 
-    /// <summary>Wrap long lines instead of scrolling horizontally (F2). On by default, matching Far.</summary>
+    /// <summary>Wrap long lines instead of scrolling horizontally (F2). On by default.</summary>
     public bool Wrap { get; set; } = true;
 
     /// <summary>Show raw bytes instead of decoded text (F4).</summary>
     public bool HexMode { get; private set; }
 
-    /// <summary>Search case insensitively. On by default, matching Far.</summary>
+    /// <summary>Search case insensitively. On by default.</summary>
     public bool IgnoreCase { get; set; } = true;
 
     /// <summary>
@@ -151,7 +151,7 @@ public sealed class FileViewer : IScreenComponent, IDisposable
     /// </summary>
     public bool SyntaxHighlight { get; set; } = true;
 
-    /// <summary>How many columns a tab character advances to. Far's viewer uses eight.</summary>
+    /// <summary>How many columns a tab character advances to. Eight, the classic console default.</summary>
     public int TabSize { get; set; } = 8;
 
     /// <summary>The byte offset shown at the top of the viewport.</summary>
@@ -435,7 +435,7 @@ public sealed class FileViewer : IScreenComponent, IDisposable
 
     /// <summary>
     /// Moves the top of the viewport down one visual row. False when the end of the file is
-    /// already visible: Far stops scrolling once the last line reaches the bottom row rather than
+    /// already visible: scrolling stops once the last line reaches the bottom row rather than
     /// letting it walk up the screen with nothing but blank rows beneath.
     /// </summary>
     private bool StepDown()
@@ -703,7 +703,8 @@ public sealed class FileViewer : IScreenComponent, IDisposable
             return;
         }
 
-        // Far overlays scroll markers on the first and last body columns when text is cut off.
+        // Overlay scroll markers on the first and last body columns when text is cut off, the
+        // classic console-viewer cue that there is more to the side.
         if (_hScroll > 0)
         {
             for (int r = 0; r < Math.Min(rows, drawn); r++)
@@ -862,8 +863,8 @@ public sealed class FileViewer : IScreenComponent, IDisposable
 
         long offset = HexMode ? _hexTop : _top;
 
-        // Far reports how far through the file the BOTTOM of the viewport reaches, so a file that
-        // fits on one screen reads 100% immediately and Ctrl+End always lands on 100%.
+        // The percentage reports how much of the file the BOTTOM of the viewport reaches, so a file
+        // that fits on one screen reads 100% immediately and Ctrl+End always lands on 100%.
         int percent = _model.Length <= 0
             ? 100
             : (int)(VisibleEndOffset(BodyRows) * 100 / _model.Length);
@@ -960,7 +961,7 @@ public sealed class FileViewer : IScreenComponent, IDisposable
 
     /// <summary>
     /// Whether the end of the file is already on screen from the current top position, which is
-    /// the point Far stops downward scrolling at. Bounded: the walk gives up as soon as it has
+    /// the point downward scrolling stops at. Bounded: the walk gives up as soon as it has
     /// counted one screenful of rows.
     /// </summary>
     private bool EndIsVisible()

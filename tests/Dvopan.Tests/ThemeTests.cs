@@ -7,30 +7,30 @@ public class ThemeDefaultsTests
 {
     private static CellStyle Style(ConsoleColor fg, ConsoleColor bg) => new(fg, bg);
 
-    // Every expectation below is transcribed from far/palette.cpp; the line number is quoted so a
-    // failure points straight at the authority rather than at somebody's screenshot.
+    // Every expectation below pins one slot of the classic default table, grouped by the surface
+    // it colours, so a failure points straight at the slot that drifted.
     [Fact]
     public void ClassicMatchesThePanelPalette()
     {
         var t = Theme.Classic();
-        Assert.Equal(Style(ConsoleColor.Cyan, ConsoleColor.DarkBlue), t.PanelBox);           // :132
+        Assert.Equal(Style(ConsoleColor.Cyan, ConsoleColor.DarkBlue), t.PanelBox);
         Assert.Equal(Style(ConsoleColor.Cyan, ConsoleColor.DarkBlue), t.PanelBoxActive);
-        Assert.Equal(Style(ConsoleColor.Cyan, ConsoleColor.DarkBlue), t.PanelTitle);         // :82
-        Assert.Equal(Style(ConsoleColor.Black, ConsoleColor.DarkCyan), t.PanelTitleActive);  // :83
-        Assert.Equal(Style(ConsoleColor.Yellow, ConsoleColor.DarkBlue), t.PanelColumnTitle); // :84
-        Assert.Equal(Style(ConsoleColor.Cyan, ConsoleColor.DarkBlue), t.PanelText);          // :76
+        Assert.Equal(Style(ConsoleColor.Cyan, ConsoleColor.DarkBlue), t.PanelTitle);
+        Assert.Equal(Style(ConsoleColor.Black, ConsoleColor.DarkCyan), t.PanelTitleActive);
+        Assert.Equal(Style(ConsoleColor.Yellow, ConsoleColor.DarkBlue), t.PanelColumnTitle);
+        Assert.Equal(Style(ConsoleColor.Cyan, ConsoleColor.DarkBlue), t.PanelText);
         Assert.Equal(Style(ConsoleColor.White, ConsoleColor.DarkBlue), t.PanelDirectory);
-        Assert.Equal(Style(ConsoleColor.DarkCyan, ConsoleColor.DarkBlue), t.PanelHidden);   // Highlight: hidden/system
-        Assert.Equal(Style(ConsoleColor.Green, ConsoleColor.DarkBlue), t.PanelExecutable);  // Highlight: *.exe group
+        Assert.Equal(Style(ConsoleColor.DarkCyan, ConsoleColor.DarkBlue), t.PanelHidden);   // hidden or system entries
+        Assert.Equal(Style(ConsoleColor.Green, ConsoleColor.DarkBlue), t.PanelExecutable);  // executables (*.exe group)
         Assert.Equal(Style(ConsoleColor.Magenta, ConsoleColor.DarkBlue), t.PanelArchive);
-        Assert.Equal(Style(ConsoleColor.Yellow, ConsoleColor.DarkBlue), t.PanelSelectedFile);   // :77
-        Assert.Equal(Style(ConsoleColor.Black, ConsoleColor.DarkCyan), t.PanelCursor);          // :80
-        Assert.Equal(Style(ConsoleColor.Yellow, ConsoleColor.DarkCyan), t.PanelCursorSelected); // :81
+        Assert.Equal(Style(ConsoleColor.Yellow, ConsoleColor.DarkBlue), t.PanelSelectedFile);
+        Assert.Equal(Style(ConsoleColor.Black, ConsoleColor.DarkCyan), t.PanelCursor);
+        Assert.Equal(Style(ConsoleColor.Yellow, ConsoleColor.DarkCyan), t.PanelCursorSelected);
         Assert.Equal(Style(ConsoleColor.White, ConsoleColor.DarkBlue), t.PanelStatus);
         Assert.Equal(Style(ConsoleColor.White, ConsoleColor.DarkBlue), t.PanelStatusFile);
-        Assert.Equal(Style(ConsoleColor.Cyan, ConsoleColor.DarkBlue), t.PanelTotals);        // :85
-        Assert.Equal(Style(ConsoleColor.Yellow, ConsoleColor.DarkBlue), t.PanelSelectedTotals); // :86
-        Assert.Equal(Style(ConsoleColor.Cyan, ConsoleColor.DarkBlue), t.PanelScrollBar);     // :130
+        Assert.Equal(Style(ConsoleColor.Cyan, ConsoleColor.DarkBlue), t.PanelTotals);
+        Assert.Equal(Style(ConsoleColor.Yellow, ConsoleColor.DarkBlue), t.PanelSelectedTotals);
+        Assert.Equal(Style(ConsoleColor.Cyan, ConsoleColor.DarkBlue), t.PanelScrollBar);
         Assert.Equal(Style(ConsoleColor.Cyan, ConsoleColor.DarkBlue), t.PanelEmpty);
         Assert.Equal(Style(ConsoleColor.White, ConsoleColor.DarkBlue), t.PanelDriveInfo);
         Assert.Equal(Style(ConsoleColor.Black, ConsoleColor.DarkCyan), t.QuickSearch);
@@ -41,92 +41,93 @@ public class ThemeDefaultsTests
     {
         var t = Theme.Classic();
         Assert.Equal(Style(ConsoleColor.Gray, ConsoleColor.Black), t.Desktop);
-        Assert.Equal(Style(ConsoleColor.Black, ConsoleColor.DarkCyan), t.Clock);          // :115
-        Assert.Equal(Style(ConsoleColor.Gray, ConsoleColor.Black), t.KeyBarNum);          // :111
-        Assert.Equal(Style(ConsoleColor.Black, ConsoleColor.DarkCyan), t.KeyBarText);     // :112
-        Assert.Equal(Style(ConsoleColor.Gray, ConsoleColor.Black), t.KeyBarBackground);   // :113
-        // :140 / :114 are Far's inherit-the-console sentinel: the command line is a strip of the
-        // bare terminal, light grey on black - which is what the user's Far screenshots show.
-        Assert.Equal(Style(ConsoleColor.Gray, ConsoleColor.Black), t.CommandLinePrefix);       // :140
-        Assert.Equal(Style(ConsoleColor.Gray, ConsoleColor.Black), t.CommandLineText);         // :114
-        Assert.Equal(Style(ConsoleColor.Black, ConsoleColor.DarkCyan), t.CommandLineSelected); // :135
+        Assert.Equal(Style(ConsoleColor.Black, ConsoleColor.DarkCyan), t.Clock);
+        Assert.Equal(Style(ConsoleColor.Gray, ConsoleColor.Black), t.KeyBarNum);
+        Assert.Equal(Style(ConsoleColor.Black, ConsoleColor.DarkCyan), t.KeyBarText);
+        Assert.Equal(Style(ConsoleColor.Gray, ConsoleColor.Black), t.KeyBarBackground);
+        // The command line inherits the console's own colours: it is a strip of the bare
+        // terminal, light grey on black - never the panel blue.
+        Assert.Equal(Style(ConsoleColor.Gray, ConsoleColor.Black), t.CommandLinePrefix);
+        Assert.Equal(Style(ConsoleColor.Gray, ConsoleColor.Black), t.CommandLineText);
+        Assert.Equal(Style(ConsoleColor.Black, ConsoleColor.DarkCyan), t.CommandLineSelected);
     }
 
     [Fact]
     public void ClassicMatchesTheMenuPalette()
     {
         var t = Theme.Classic();
-        Assert.Equal(Style(ConsoleColor.Black, ConsoleColor.DarkCyan), t.MenuBarText);            // :72
-        Assert.Equal(Style(ConsoleColor.Yellow, ConsoleColor.DarkCyan), t.MenuBarHighlight);      // :74
-        Assert.Equal(Style(ConsoleColor.White, ConsoleColor.Black), t.MenuBarSelected);           // :73
-        Assert.Equal(Style(ConsoleColor.Yellow, ConsoleColor.Black), t.MenuBarSelectedHighlight); // :75
-        Assert.Equal(Style(ConsoleColor.White, ConsoleColor.DarkCyan), t.MenuBox);                // :70
-        Assert.Equal(Style(ConsoleColor.White, ConsoleColor.DarkCyan), t.MenuTitle);              // :71
-        Assert.Equal(Style(ConsoleColor.White, ConsoleColor.DarkCyan), t.MenuText);               // :66
-        Assert.Equal(Style(ConsoleColor.Yellow, ConsoleColor.DarkCyan), t.MenuHighlight);         // :68
-        Assert.Equal(Style(ConsoleColor.White, ConsoleColor.Black), t.MenuSelected);              // :67
-        Assert.Equal(Style(ConsoleColor.Yellow, ConsoleColor.Black), t.MenuSelectedHighlight);    // :69
-        Assert.Equal(Style(ConsoleColor.DarkGray, ConsoleColor.DarkCyan), t.MenuDisabled);        // :147
+        Assert.Equal(Style(ConsoleColor.Black, ConsoleColor.DarkCyan), t.MenuBarText);
+        Assert.Equal(Style(ConsoleColor.Yellow, ConsoleColor.DarkCyan), t.MenuBarHighlight);
+        Assert.Equal(Style(ConsoleColor.White, ConsoleColor.Black), t.MenuBarSelected);
+        Assert.Equal(Style(ConsoleColor.Yellow, ConsoleColor.Black), t.MenuBarSelectedHighlight);
+        Assert.Equal(Style(ConsoleColor.White, ConsoleColor.DarkCyan), t.MenuBox);
+        Assert.Equal(Style(ConsoleColor.White, ConsoleColor.DarkCyan), t.MenuTitle);
+        Assert.Equal(Style(ConsoleColor.White, ConsoleColor.DarkCyan), t.MenuText);
+        Assert.Equal(Style(ConsoleColor.Yellow, ConsoleColor.DarkCyan), t.MenuHighlight);
+        Assert.Equal(Style(ConsoleColor.White, ConsoleColor.Black), t.MenuSelected);
+        Assert.Equal(Style(ConsoleColor.Yellow, ConsoleColor.Black), t.MenuSelectedHighlight);
+        Assert.Equal(Style(ConsoleColor.DarkGray, ConsoleColor.DarkCyan), t.MenuDisabled);
         Assert.Equal(Style(ConsoleColor.White, ConsoleColor.DarkCyan), t.MenuSeparator);
-        Assert.Equal(Style(ConsoleColor.White, ConsoleColor.DarkCyan), t.MenuScroll);             // :138
+        Assert.Equal(Style(ConsoleColor.White, ConsoleColor.DarkCyan), t.MenuScroll);
     }
 
     [Fact]
     public void ClassicMatchesTheDialogPalette()
     {
         var t = Theme.Classic();
-        Assert.Equal(Style(ConsoleColor.Black, ConsoleColor.Gray), t.DialogBox);                    // :89
-        Assert.Equal(Style(ConsoleColor.Black, ConsoleColor.Gray), t.DialogBoxTitle);               // :90
-        Assert.Equal(Style(ConsoleColor.Black, ConsoleColor.Gray), t.DialogText);                   // :87
-        Assert.Equal(Style(ConsoleColor.Yellow, ConsoleColor.Gray), t.DialogHighlight);             // :88
-        Assert.Equal(Style(ConsoleColor.Black, ConsoleColor.DarkCyan), t.DialogEdit);               // :92
-        Assert.Equal(Style(ConsoleColor.White, ConsoleColor.Black), t.DialogEditSelected);          // :134
-        Assert.Equal(Style(ConsoleColor.DarkGray, ConsoleColor.DarkCyan), t.DialogEditDisabled);    // :142
-        Assert.Equal(Style(ConsoleColor.Black, ConsoleColor.Gray), t.DialogButton);                 // :93
-        Assert.Equal(Style(ConsoleColor.Yellow, ConsoleColor.Gray), t.DialogButtonHighlight);       // :95
-        Assert.Equal(Style(ConsoleColor.Black, ConsoleColor.DarkCyan), t.DialogButtonSelected);     // :94
-        Assert.Equal(Style(ConsoleColor.Yellow, ConsoleColor.DarkCyan), t.DialogButtonSelectedHighlight); // :96
-        Assert.Equal(Style(ConsoleColor.Black, ConsoleColor.Gray), t.DialogListText);               // :97
-        Assert.Equal(Style(ConsoleColor.Yellow, ConsoleColor.Gray), t.DialogListHighlight);         // :99
-        Assert.Equal(Style(ConsoleColor.White, ConsoleColor.Black), t.DialogListSelected);          // :98
-        Assert.Equal(Style(ConsoleColor.Yellow, ConsoleColor.Black), t.DialogListSelectedHighlight); // :100
+        Assert.Equal(Style(ConsoleColor.Black, ConsoleColor.Gray), t.DialogBox);
+        Assert.Equal(Style(ConsoleColor.Black, ConsoleColor.Gray), t.DialogBoxTitle);
+        Assert.Equal(Style(ConsoleColor.Black, ConsoleColor.Gray), t.DialogText);
+        Assert.Equal(Style(ConsoleColor.Yellow, ConsoleColor.Gray), t.DialogHighlight);
+        Assert.Equal(Style(ConsoleColor.Black, ConsoleColor.DarkCyan), t.DialogEdit);
+        Assert.Equal(Style(ConsoleColor.White, ConsoleColor.Black), t.DialogEditSelected);
+        Assert.Equal(Style(ConsoleColor.DarkGray, ConsoleColor.DarkCyan), t.DialogEditDisabled);
+        Assert.Equal(Style(ConsoleColor.Black, ConsoleColor.Gray), t.DialogButton);
+        Assert.Equal(Style(ConsoleColor.Yellow, ConsoleColor.Gray), t.DialogButtonHighlight);
+        Assert.Equal(Style(ConsoleColor.Black, ConsoleColor.DarkCyan), t.DialogButtonSelected);
+        Assert.Equal(Style(ConsoleColor.Yellow, ConsoleColor.DarkCyan), t.DialogButtonSelectedHighlight);
+        Assert.Equal(Style(ConsoleColor.Black, ConsoleColor.Gray), t.DialogListText);
+        Assert.Equal(Style(ConsoleColor.Yellow, ConsoleColor.Gray), t.DialogListHighlight);
+        Assert.Equal(Style(ConsoleColor.White, ConsoleColor.Black), t.DialogListSelected);
+        Assert.Equal(Style(ConsoleColor.Yellow, ConsoleColor.Black), t.DialogListSelectedHighlight);
     }
 
     [Fact]
     public void ClassicMatchesTheWarningDialogPalette()
     {
         var t = Theme.Classic();
-        Assert.Equal(Style(ConsoleColor.White, ConsoleColor.DarkRed), t.WarnDialogBox);            // :103
-        Assert.Equal(Style(ConsoleColor.White, ConsoleColor.DarkRed), t.WarnDialogBoxTitle);       // :104
-        Assert.Equal(Style(ConsoleColor.White, ConsoleColor.DarkRed), t.WarnDialogText);           // :101
-        Assert.Equal(Style(ConsoleColor.Yellow, ConsoleColor.DarkRed), t.WarnDialogHighlight);     // :102
-        Assert.Equal(Style(ConsoleColor.White, ConsoleColor.DarkRed), t.WarnDialogButton);         // :107
-        Assert.Equal(Style(ConsoleColor.Yellow, ConsoleColor.DarkRed), t.WarnDialogButtonHighlight); // :109
-        Assert.Equal(Style(ConsoleColor.Black, ConsoleColor.Gray), t.WarnDialogButtonSelected);    // :108
-        Assert.Equal(Style(ConsoleColor.Yellow, ConsoleColor.Gray), t.WarnDialogButtonSelectedHighlight); // :110
+        Assert.Equal(Style(ConsoleColor.White, ConsoleColor.DarkRed), t.WarnDialogBox);
+        Assert.Equal(Style(ConsoleColor.White, ConsoleColor.DarkRed), t.WarnDialogBoxTitle);
+        Assert.Equal(Style(ConsoleColor.White, ConsoleColor.DarkRed), t.WarnDialogText);
+        Assert.Equal(Style(ConsoleColor.Yellow, ConsoleColor.DarkRed), t.WarnDialogHighlight);
+        Assert.Equal(Style(ConsoleColor.White, ConsoleColor.DarkRed), t.WarnDialogButton);
+        Assert.Equal(Style(ConsoleColor.Yellow, ConsoleColor.DarkRed), t.WarnDialogButtonHighlight);
+        Assert.Equal(Style(ConsoleColor.Black, ConsoleColor.Gray), t.WarnDialogButtonSelected);
+        Assert.Equal(Style(ConsoleColor.Yellow, ConsoleColor.Gray), t.WarnDialogButtonSelectedHighlight);
     }
 
     [Fact]
     public void ClassicMatchesTheViewerEditorAndProgressPalette()
     {
         var t = Theme.Classic();
-        Assert.Equal(Style(ConsoleColor.Cyan, ConsoleColor.DarkBlue), t.ViewerText);         // :116
-        Assert.Equal(Style(ConsoleColor.Black, ConsoleColor.DarkCyan), t.ViewerSelected);    // :117
-        Assert.Equal(Style(ConsoleColor.Black, ConsoleColor.DarkCyan), t.ViewerStatus);      // :118
-        Assert.Equal(Style(ConsoleColor.Yellow, ConsoleColor.DarkBlue), t.ViewerArrows);     // :136
-        Assert.Equal(Style(ConsoleColor.Cyan, ConsoleColor.DarkBlue), t.EditorText);         // :119
-        Assert.Equal(Style(ConsoleColor.Black, ConsoleColor.DarkCyan), t.EditorSelected);    // :120
-        Assert.Equal(Style(ConsoleColor.Black, ConsoleColor.DarkCyan), t.EditorStatus);      // :121
-        Assert.Equal(Style(ConsoleColor.Cyan, ConsoleColor.DarkBlue), t.EditorScroll);       // :193
+        Assert.Equal(Style(ConsoleColor.Cyan, ConsoleColor.DarkBlue), t.ViewerText);
+        Assert.Equal(Style(ConsoleColor.Black, ConsoleColor.DarkCyan), t.ViewerSelected);
+        Assert.Equal(Style(ConsoleColor.Black, ConsoleColor.DarkCyan), t.ViewerStatus);
+        Assert.Equal(Style(ConsoleColor.Yellow, ConsoleColor.DarkBlue), t.ViewerArrows);
+        Assert.Equal(Style(ConsoleColor.Cyan, ConsoleColor.DarkBlue), t.EditorText);
+        Assert.Equal(Style(ConsoleColor.Black, ConsoleColor.DarkCyan), t.EditorSelected);
+        Assert.Equal(Style(ConsoleColor.Black, ConsoleColor.DarkCyan), t.EditorStatus);
+        Assert.Equal(Style(ConsoleColor.Cyan, ConsoleColor.DarkBlue), t.EditorScroll);
         Assert.Equal(Style(ConsoleColor.Cyan, ConsoleColor.DarkBlue), t.ProgressBar);
         Assert.Equal(Style(ConsoleColor.DarkGray, ConsoleColor.DarkBlue), t.ProgressBarEmpty);
     }
 
     /// <summary>
-    /// The root defect this table was corrected for. Far's background macro B_CYAN expands to
-    /// C_CYAN = index 3 = DarkCyan; only the foreground F_LIGHTCYAN is index 11 = Cyan. Emitting
-    /// bright cyan as a background is SGR 106 where Far writes SGR 46, and no palette can undo it -
-    /// so no entry may ever use the bright slot as a background again.
+    /// The root defect this table was corrected for. The cyan the classic look uses as a
+    /// background is the dark slot, index 3 = DarkCyan; only the foreground cyan is the bright
+    /// slot, index 11 = Cyan. Emitting bright cyan as a background is SGR 106 where the classic
+    /// look writes SGR 46, and no palette can undo it - so no entry may ever use the bright slot
+    /// as a background again.
     /// </summary>
     [Fact]
     public void NoEntryUsesTheBrightCyanSlotAsABackground()
@@ -137,15 +138,15 @@ public class ThemeDefaultsTests
             Assert.NotEqual(ConsoleColor.Cyan, slot.Get(t).Bg);
         }
 
-        // The bright slot is still very much in use - as a foreground, which is where Far puts it.
+        // The bright slot is still very much in use - as a foreground, which is where it belongs.
         Assert.Contains(Theme.Slots, s => s.Get(t).Fg == ConsoleColor.Cyan);
     }
 
     /// <summary>
-    /// COL_PANELBOX and COL_PANELTEXT are different enum constants carrying the same default
-    /// attribute (palette.cpp :132 and :76), as are the title, the totals line and the scroll bar.
-    /// Far's panel really is near monochrome; inventing a dimmer frame to "fix" the look would be
-    /// a departure from Far, not a correction.
+    /// The panel frame and the file text are different slots carrying the same default
+    /// attribute, as are the title, the totals line and the scroll bar. The classic panel really
+    /// is near monochrome; inventing a dimmer frame to "fix" the look would be a departure from
+    /// it, not a correction.
     /// </summary>
     [Fact]
     public void ThePanelFrameAndTheFileTextShareOneAttributeOnPurpose()
@@ -163,8 +164,8 @@ public class ThemeDefaultsTests
     }
 
     /// <summary>
-    /// The command line is a strip of terminal and sits on the console's black, exactly as Far
-    /// draws it - light grey on black, never on the panel blue - and every colour the typed
+    /// The command line is a strip of terminal and sits on the console's black, as the classic
+    /// look draws it - light grey on black, never on the panel blue - and every colour the typed
     /// command can take shares that black, so a coloured word never shows up as a coloured box.
     /// </summary>
     [Fact]
@@ -182,7 +183,7 @@ public class ThemeDefaultsTests
         }
     }
 
-    /// <summary>Far gives Keybar.Num and Keybar.Background the same attribute (:111 and :113).</summary>
+    /// <summary>The classic look gives Keybar.Num and Keybar.Background the same attribute.</summary>
     [Fact]
     public void TheKeyBarNumberAndBackgroundShareOneAttribute()
     {
@@ -254,23 +255,23 @@ public class ThemePaletteTests
 
     /// <summary>
     /// The second built-in theme exists to make the point that the palette is the variable: its
-    /// 74 entries are identical to Far Default's, and only the RGB behind them differs.
+    /// 74 entries are identical to Classic's, and only the RGB behind them differs.
     /// </summary>
     [Fact]
-    public void FarNtIsTheSameTableOverADifferentPalette()
+    public void ClassicNtIsTheSameTableOverADifferentPalette()
     {
-        var far = Theme.Classic();
-        var nt = Theme.FarNt();
+        var classic = Theme.Classic();
+        var nt = Theme.ClassicNt();
 
-        Assert.Equal("Far NT", nt.Name);
+        Assert.Equal("Classic NT", nt.Name);
         foreach (var slot in Theme.Slots)
         {
-            Assert.Equal(slot.Get(far), slot.Get(nt));
+            Assert.Equal(slot.Get(classic), slot.Get(nt));
         }
 
         AssertSamePalette(Palette.WindowsNt, nt.Palette);
         Assert.Equal("#000080", nt.Palette[ConsoleColor.DarkBlue].ToHex());
-        Assert.Equal("#0000AA", far.Palette[ConsoleColor.DarkBlue].ToHex());
+        Assert.Equal("#0000AA", classic.Palette[ConsoleColor.DarkBlue].ToHex());
     }
 
     /// <summary>
@@ -282,7 +283,7 @@ public class ThemePaletteTests
     public void TheDominantPanelPairIsHighContrastInBothBuiltIns()
     {
         Assert.True(Theme.Classic().Palette.ContrastOf(Theme.Classic().PanelText) > 10.0);
-        Assert.True(Theme.FarNt().Palette.ContrastOf(Theme.FarNt().PanelText) > 12.0);
+        Assert.True(Theme.ClassicNt().Palette.ContrastOf(Theme.ClassicNt().PanelText) > 12.0);
 
         // The reference case: the same style under the terminal's default scheme.
         Assert.True(Palette.Campbell.ContrastOf(Theme.Classic().PanelText) < 5.0);
@@ -290,7 +291,8 @@ public class ThemePaletteTests
 
     /// <summary>
     /// The cursor bar was over-bright, not washed out - the opposite sign to the panel's problem.
-    /// Black on the bright slot is a harsher bar than Far ever draws; B_CYAN is what tames it.
+    /// Black on the bright slot is a harsher bar than the classic look ever draws; the dark
+    /// cyan background is what tames it.
     /// </summary>
     [Fact]
     public void TheCursorBarIsNoLongerOverBright()
@@ -313,9 +315,9 @@ public class ThemePaletteTests
 
     [Theory]
     [InlineData("Classic")]
-    [InlineData("far default")]
-    [InlineData("far_default")]
-    [InlineData("Far")]
+    [InlineData("Clas sic")]
+    [InlineData("clas_sic")]
+    [InlineData("CLASSIC")]
     [InlineData("default")]
     public void BuiltInLookupFindsClassic(string name)
     {
@@ -324,14 +326,14 @@ public class ThemePaletteTests
     }
 
     [Theory]
-    [InlineData("Far NT")]
-    [InlineData("farnt")]
+    [InlineData("Classic NT")]
+    [InlineData("classicnt")]
     [InlineData("NT")]
     [InlineData("windows-nt")]
-    public void BuiltInLookupFindsFarNt(string name)
+    public void BuiltInLookupFindsClassicNt(string name)
     {
         Assert.True(Theme.TryGetBuiltIn(name, out var t));
-        Assert.Equal("Far NT", t.Name);
+        Assert.Equal("Classic NT", t.Name);
     }
 
     [Theory]
@@ -345,7 +347,7 @@ public class ThemePaletteTests
     {
         Assert.Equal(2, Theme.BuiltInNames.Count);
         Assert.Equal("Classic", Theme.BuiltInNames[0]);
-        Assert.Equal("Far NT", Theme.BuiltInNames[1]);
+        Assert.Equal("Classic NT", Theme.BuiltInNames[1]);
 
         foreach (string name in Theme.BuiltInNames)
         {
@@ -358,7 +360,7 @@ public class ThemePaletteTests
     [InlineData("WindowsNt")]
     [InlineData("windows nt")]
     [InlineData("NT")]
-    [InlineData("far")]
+    [InlineData("legacy")]
     public void NamedPaletteLookupFindsWindowsNt(string name)
     {
         Assert.True(ThemePalette.TryGetBuiltIn(name, out var p));
@@ -662,8 +664,8 @@ public class ThemeJsonTests : IDisposable
     [Fact]
     public void LoadOrDefaultAcceptsABuiltInNameWhereAPathWouldGo()
     {
-        Assert.Equal("Far NT", Theme.LoadOrDefault("Far NT").Name);
-        Assert.Equal("Classic", Theme.LoadOrDefault("far").Name);
+        Assert.Equal("Classic NT", Theme.LoadOrDefault("Classic NT").Name);
+        Assert.Equal("Classic", Theme.LoadOrDefault("default").Name);
 
         // A path that simply is not there still falls back rather than guessing.
         Assert.Equal("Classic", Theme.LoadOrDefault(TempFile("nope.json")).Name);
@@ -674,7 +676,7 @@ public class ThemeJsonTests : IDisposable
     [Fact]
     public void SaveThenLoadRoundTripsThePaletteToo()
     {
-        var original = Theme.FarNt();
+        var original = Theme.ClassicNt();
         original.Name = "Round Trip";
         original.Palette = Palette.WindowsNt.With(ConsoleColor.DarkBlue, new Rgb(0x01, 0x02, 0x03));
 

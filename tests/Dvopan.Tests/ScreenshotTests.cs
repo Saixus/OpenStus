@@ -143,7 +143,7 @@ public class ScreenshotTests
     }
 
     [Fact]
-    public void TheKeyBarIsTheFarPanelRow()
+    public void TheKeyBarIsTheBottomRow()
     {
         using var tree = new ShellTree("keybar");
         using Application app = Build(tree.Root, tree.Root);
@@ -266,7 +266,7 @@ public class ScreenshotTests
         string frame = Frame(app);
         Assert.DoesNotContain("readme.md", frame, StringComparison.Ordinal);
 
-        // Far keeps the command line live while the panels are off: typing lands there and the
+        // The command line stays live while the panels are off: typing lands there and the
         // panels stay hidden.
         app.ProcessInput(InputEvent.FromKey(new KeyEvent(ConsoleKey.D, 'd', KeyMods.None)));
         Assert.True(app.PanelsHidden);
@@ -309,7 +309,7 @@ public class ScreenshotTests
         using Application app = Build(tree.Root, tree.Root);
 
         // A name with a space arrives quoted - the same rule as Ctrl+J, whose synonym the help
-        // screen documents Ctrl+Enter to be - and Far's trailing space comes with it.
+        // screen documents Ctrl+Enter to be - and the trailing space comes with it.
         FilePanel panel = app.LeftFilePanel;
         panel.CursorIndex = panel.Entries.ToList().FindIndex(e => e.Name == "my file.txt");
         app.ProcessInput(InputEvent.FromKey(new KeyEvent(ConsoleKey.Enter, '\r', KeyMods.Ctrl)));
@@ -581,7 +581,7 @@ public class MainMenuTests
     }
 
     [Fact]
-    public void TheBarHasTheFiveFarTitles()
+    public void TheBarHasTheFiveClassicTitles()
     {
         using var tree = new ShellTree("menu");
         using Application app = NewApp(tree.Root);

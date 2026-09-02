@@ -45,7 +45,7 @@ public readonly record struct KeyEvent(ConsoleKey Key, char Ch, KeyMods Mods)
     public bool HasMods => Mods != KeyMods.None;
 
     /// <summary>
-    /// Renders the key in the canonical Far notation used by the key binding table and the help
+    /// Renders the key in the canonical key notation used by the key binding table and the help
     /// screen, for example <c>"Ctrl+Alt+F5"</c>, <c>"Shift+Ins"</c>, <c>"Gray+"</c>, <c>"Enter"</c>
     /// or <c>"A"</c>. Modifiers are always emitted in Ctrl, Alt, Shift order.
     /// </summary>

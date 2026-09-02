@@ -87,7 +87,7 @@ an interface in `Core` rather than a reference.
 ## Commits and pull requests
 
 - One logical change per pull request; keep unrelated reformatting out of it.
-- Describe the user-visible effect in the description, and mention any Far Manager behaviour you were
+- Describe the user-visible effect in the description, and mention any established file-manager convention you were
   matching, with a pointer to where you checked it.
 - Add an entry to `CHANGELOG.md` under `Unreleased`.
 

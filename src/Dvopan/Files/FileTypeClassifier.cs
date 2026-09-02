@@ -1,7 +1,7 @@
 namespace Dvopan.Files;
 
 /// <summary>
-/// The colour class a panel row falls into, in Far's own precedence order.
+/// The colour class a panel row falls into, in the classic orthodox-file-manager precedence order.
 /// </summary>
 /// <remarks>
 /// The panel adds the two states the file system knows nothing about - the cursor bar and the tag

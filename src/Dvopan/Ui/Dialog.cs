@@ -22,7 +22,7 @@ namespace Dvopan.Ui;
 /// focused control, then Tab/Shift+Tab, Enter, Esc, and finally the Alt+hotkey and bare-hotkey
 /// lookups. Because the focused control gets the key first, an edit field naturally swallows plain
 /// characters and hotkeys stop firing while the caret is in it. A Ctrl chord is never a hotkey -
-/// Far dialogs only react to the plain letter or Alt+letter.
+/// dialogs only react to the plain letter or Alt+letter.
 /// </para>
 /// </remarks>
 public class Dialog : IScreenComponent
@@ -61,7 +61,7 @@ public class Dialog : IScreenComponent
     /// <summary>When set, the red warning palette is used.</summary>
     public bool IsWarning { get; set; }
 
-    /// <summary>The frame line style; Far uses double lines for dialogs.</summary>
+    /// <summary>The frame line style; double lines are the classic dialog frame.</summary>
     public BoxStyle FrameStyle { get; set; } = BoxStyle.Double;
 
     /// <summary>When set, the classic two-column drop shadow is painted.</summary>
@@ -351,7 +351,7 @@ public class Dialog : IScreenComponent
             return true;
         }
 
-        // Ctrl chords are never dialog hotkeys. Far reacts to the plain letter and to
+        // Ctrl chords are never dialog hotkeys. A dialog reacts to the plain letter and to
         // Alt+letter only, so Ctrl+Y must not answer Yes to a delete confirmation.
         if ((key.Mods & KeyMods.Ctrl) == 0 && HotkeyOf(key) is char c)
         {

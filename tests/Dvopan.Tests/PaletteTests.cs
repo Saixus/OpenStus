@@ -203,7 +203,7 @@ public class PaletteTests
     }
 
     [Fact]
-    public void TheFarNtPaletteIsHarderStillOnTheDominantPair()
+    public void TheClassicNtPaletteIsHarderStillOnTheDominantPair()
     {
         double nt = Palette.ContrastRatio(
             Palette.WindowsNt[ConsoleColor.Cyan],
@@ -271,7 +271,7 @@ public class PaletteTests
 
             Assert.Equal("Half", p.Name);
             Assert.Equal("#010203", p[ConsoleColor.DarkBlue].ToHex());  // set
-            Assert.Equal("#040506", p[ConsoleColor.Cyan].ToHex());      // set through the Far alias
+            Assert.Equal("#040506", p[ConsoleColor.Cyan].ToHex());      // set through the LightCyan alias
             Assert.Equal("#FFFF00", p[ConsoleColor.Yellow].ToHex());    // malformed value ignored
             Assert.Equal("#800000", p[ConsoleColor.DarkRed].ToHex());   // absent entirely
         }
@@ -492,7 +492,7 @@ public class TrueColorRenderingTests
         var b = new ScreenBuffer(4, 1);
         b.Set(0, 0, 'A', new CellStyle(ConsoleColor.Cyan, ConsoleColor.DarkBlue));
 
-        // #55FFFF on #0000AA: the crisp Far panel pair, pinned regardless of the terminal scheme.
+        // #55FFFF on #0000AA: the crisp classic panel pair, pinned regardless of the terminal scheme.
         Assert.Equal(
             E + "[38;2;85;255;255;48;2;0;0;170mA" + E + "[0m",
             b.RenderAnsi(ColorDepth.TrueColor));

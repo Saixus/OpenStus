@@ -9,9 +9,10 @@ namespace Dvopan.Core;
 /// The definition of the horizontal (F9) menu: Left, Files, Commands, Options, Right.
 /// </summary>
 /// <remarks>
-/// The structure follows Far Manager's own menu arrays, minus the entries whose feature is not in
-/// this version. Every leaf carries the accelerator hint on its right and an action bound to the
-/// application, so <c>MenuBar.RunModal</c> can simply invoke the chosen item.
+/// The structure follows the classic orthodox-file-manager layout of the F9 menu, minus the entries
+/// whose feature is not in this version. Every leaf carries the accelerator hint on its right and
+/// an action bound to the application, so <c>MenuBar.RunModal</c> can simply invoke the chosen
+/// item.
 /// </remarks>
 public static class MainMenu
 {

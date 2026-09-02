@@ -251,7 +251,7 @@ public class CommandLineArgsOptionTests
             usage,
             StringComparison.Ordinal);
 
-        // The default is the table Far installs, not the older CGA/EGA one.
+        // The default is the Windows NT console table, not the older CGA/EGA one.
         Assert.Contains("nt (the default", usage, StringComparison.Ordinal);
 
         Assert.Contains(

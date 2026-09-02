@@ -25,7 +25,7 @@ namespace Dvopan.Ui;
 /// <para>
 /// Each cell is the key number in <see cref="Theme.KeyBarNum"/> immediately followed by the caption in
 /// <see cref="Theme.KeyBarText"/>. The padding columns after the caption stay in
-/// <see cref="Theme.KeyBarBackground"/>: they are the gap between the coloured caption blocks in Far.
+/// <see cref="Theme.KeyBarBackground"/>: they are the gap between the coloured caption blocks.
 /// A cell whose caption is empty is drawn entirely in the background style - an unbound key shows no
 /// number.
 /// </para>

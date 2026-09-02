@@ -9,8 +9,8 @@ using Dvopan.Theming;
 namespace Dvopan.Editor;
 
 /// <summary>
-/// Far Manager's F4 editor: a full screen plain text editor with block selection, bounded undo and
-/// exact preservation of the file's encoding and line terminators.
+/// The F4 editor: a full screen plain text editor with block selection, bounded undo and exact
+/// preservation of the file's encoding and line terminators.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -134,7 +134,7 @@ public sealed class FileEditor : IScreenComponent
     /// <summary>Whether typing replaces characters instead of inserting them (the Insert key).</summary>
     public bool Overwrite { get; set; }
 
-    /// <summary>Search case insensitively. On by default, matching Far.</summary>
+    /// <summary>Search case insensitively. On by default.</summary>
     public bool IgnoreCase { get; set; } = true;
 
     /// <summary>Draw a scroll bar down the right edge when the document does not fit.</summary>
@@ -527,9 +527,9 @@ public sealed class FileEditor : IScreenComponent
 
     /// <summary>
     /// Scrolls the viewport without an explicit caret motion (Ctrl+Up/Down, the mouse wheel),
-    /// dragging the caret along when it would fall off screen. Far scrolls the same way - and
-    /// without the drag the next draw's <see cref="ScrollIntoView"/> would simply snap the view
-    /// straight back to the caret, turning the key into a visible no-op.
+    /// dragging the caret along when it would fall off screen. Classic console editors scroll the
+    /// same way - and without the drag the next draw's <see cref="ScrollIntoView"/> would simply
+    /// snap the view straight back to the caret, turning the key into a visible no-op.
     /// </summary>
     /// <param name="delta">How many lines to scroll; negative scrolls up.</param>
     private void ScrollView(int delta)
@@ -740,7 +740,7 @@ public sealed class FileEditor : IScreenComponent
 
         // Start exactly at the caret: a fresh search then finds a match sitting under it, and a
         // continued one - the caret is already just past the previous match - finds an occurrence
-        // beginning flush against it. Far behaves the same way on F7 and Shift+F7.
+        // beginning flush against it. F7 and Shift+F7 both rely on this.
         FindFrom(_cursor.Line, _cursor.Column, report: true);
     }
 

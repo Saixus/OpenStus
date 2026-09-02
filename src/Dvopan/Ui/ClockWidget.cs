@@ -5,7 +5,7 @@ using Dvopan.Theming;
 namespace Dvopan.Ui;
 
 /// <summary>
-/// The clock Far draws in the top right corner, over whatever panel frame happens to be underneath.
+/// The clock drawn in the top right corner, over whatever panel frame happens to be underneath.
 /// </summary>
 /// <remarks>
 /// The format is fixed to the invariant culture on purpose: a twelve hour clock with an unpadded

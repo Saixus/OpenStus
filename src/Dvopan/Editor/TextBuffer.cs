@@ -44,8 +44,8 @@ public readonly record struct TextLine(string Text, string Ending)
 public sealed class TextBuffer
 {
     /// <summary>
-    /// The tab stop width used when none is configured. Eight, matching Far's editor default and
-    /// the viewer, so F3 and F4 show a tabbed file with the same indentation.
+    /// The tab stop width used when none is configured. Eight, the classic console default and the
+    /// same as the viewer, so F3 and F4 show a tabbed file with the same indentation.
     /// </summary>
     public const int DefaultTabSize = 8;
 

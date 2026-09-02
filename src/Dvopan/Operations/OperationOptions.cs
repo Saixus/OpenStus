@@ -7,8 +7,8 @@ namespace Dvopan.Operations;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The defaults are Far Manager's: delete to the recycle bin, ask before overwriting, and carry the
-/// timestamps and attributes over to the copy. <see cref="FromSettings"/> derives an instance from
+/// The defaults follow the classic orthodox-file-manager convention: delete to the recycle bin, ask
+/// before overwriting, and carry the timestamps and attributes over to the copy. <see cref="FromSettings"/> derives an instance from
 /// the persisted user preferences, so the panels never have to translate the two by hand.
 /// </para>
 /// <para>

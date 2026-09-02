@@ -1,7 +1,7 @@
 # Dvopan
 
-Dvopan is an open source, cross-platform, [Far Manager](https://farmanager.com/) style
-dual-pane console file manager written in C# on .NET 10.
+Dvopan is an open source, cross-platform dual-pane console file manager written in C# on .NET 10:
+an open source alternative to Far Manager, Midnight Commander and the other orthodox file managers.
 
 Two panels, a command line, a function key bar and a clock — the layout every orthodox file manager
 has used since the Norton Commander. Everything is drawn with plain VT escape sequences, so it looks
@@ -9,9 +9,9 @@ and behaves the same in Windows Terminal, conhost, and any terminal emulator on 
 
 - **No third-party dependencies.** The application is a single assembly on top of the base class
   library; xunit is used by the test project only.
-- **At home for Far Manager users.** The default colours, the key bar captions, the panel layout,
-  the column headers, the totals line and the selection semantics follow Far Manager's defaults, so
-  the muscle memory carries over - see [NOTICE.md](NOTICE.md) for the attribution.
+- **The classic look and keys.** Blue panels, cyan frames, yellow column titles, the function key
+  bar and the keyboard conventions every orthodox file manager has shared since Norton Commander, so
+  the muscle memory carries over.
 - **Testable rendering.** The whole UI paints into an in-memory `ScreenBuffer`, so a frame can be
   rendered, asserted on and printed without a console — which is what `--screenshot` does.
 
@@ -97,8 +97,8 @@ oc [startPath] [options]
   --colors <mode>        auto (the default), truecolor or indexed;
                          indexed keeps the terminal's own colour scheme
   --palette <name|file>  RGB values for the 16 colour slots, used by
-                         truecolor: nt (the default, the table Far
-                         installs), vga, campbell, or a JSON file
+                         truecolor: nt (the default, the Windows NT
+                         console table), vga, campbell, or a JSON file
   --view <1-9>           initial view mode for both panels
                          1 Brief  2 Medium  3 Full  4 Wide  5 Detailed
   --clock <HH:mm|off>    pin the corner clock to a fixed time, or hide
@@ -151,7 +151,7 @@ The dominant pair, as WCAG contrast ratios:
 | --- | --- | --- |
 | Windows Terminal *Campbell* | `#61D6D6` on `#0037DA` | **4.73:1** |
 | Classic VGA — Dvopan's default | `#55FFFF` on `#0000AA` | **10.84:1** |
-| Legacy Windows console — what Far Manager installs | `#00FFFF` on `#000080` | **12.77:1** |
+| Legacy Windows console (the NT table) | `#00FFFF` on `#000080` | **12.77:1** |
 
 Campbell's blue is about 2.7 times as bright as the classic one (relative luminance 0.078 against
 0.029), and that brightness is what closes the gap against the cyan in front of it. 4.73:1 barely
@@ -162,8 +162,8 @@ right word for it.
 
 So Dvopan does not ask for a slot. Wherever the terminal can take it, each cell is written as
 24-bit colour resolved through the classic VGA palette — `ESC[38;2;85;255;255;48;2;0;0;170m` instead
-of `ESC[96;44m` — and the panels then look the same whatever the terminal is themed as. Far Manager
-does the same thing by a different route: it overwrites the console's palette outright at start-up.
+of `ESC[96;44m` — and the panels then look the same whatever the terminal is themed as. Some managers
+get the same effect by overwriting the console's palette outright at start-up.
 Pinning the colours per cell was preferred here because it leaves the terminal's own scheme untouched
 for every other program, including the ones `oc` runs from its command line.
 
@@ -228,7 +228,7 @@ ignored.
 
 ```json
 {
-  "name": "Far NT",
+  "name": "Classic NT",
   "colors": {
     "DarkBlue": "#000080",
     "DarkCyan": "#008080",
@@ -240,7 +240,7 @@ ignored.
 }
 ```
 
-That one is the legacy Windows console table Far Manager installs, and it is a slightly harder look
+That one is the legacy Windows NT console table, and it is a slightly harder look
 than the DOS-era default: `#000080` instead of `#0000AA` behind the panels. Slots the file omits keep
 their classic VGA value, so a file may name a single colour. Keys are `ConsoleColor` names, the
 indices `0`-`15`, or the familiar aliases (`LightCyan`, `Brown`, `BrightWhite`, ...), and colours are
@@ -414,7 +414,7 @@ Everything lives in one folder:
 
 A theme is a JSON file naming a foreground and a background `ConsoleColor` per interface element;
 point at one with `--theme <file.json>` or with the `themePath` setting. Anything the file omits keeps
-the built-in Far palette, and an unreadable or malformed theme silently falls back to it — a broken
+the built-in classic palette, and an unreadable or malformed theme silently falls back to it — a broken
 colour file must never keep you out of your file manager.
 
 Three entries in `settings.json` are about colour:
@@ -500,14 +500,12 @@ the only type that wires the whole thing together.
 ## Contributing
 
 Patches are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for the build, test and style
-expectations, and [CHANGELOG.md](CHANGELOG.md) for what has landed so far.
+expectations, and [CHANGELOG.md](CHANGELOG.md) for what has landed to date.
 
 ## Licence
 
 MIT. See [LICENSE](LICENSE).
 
-Dvopan is an independent re-implementation of the user-interface conventions Far Manager
-made familiar and shares no code with it. "Far Manager" is the name of that project, used here only
-to describe compatibility and inspiration; Dvopan is not affiliated with or endorsed by Far
-Group. The defaults borrowed from it - colours, key bar captions, layout - are acknowledged, with
-Far Manager's BSD 3-Clause notice, in [NOTICE.md](NOTICE.md).
+Dvopan is an independent implementation that shares no code with any other file manager. Norton
+Commander, Midnight Commander and Far Manager are the names of other projects, mentioned only to
+describe the conventions Dvopan follows and the alternatives it offers; see [NOTICE.md](NOTICE.md).

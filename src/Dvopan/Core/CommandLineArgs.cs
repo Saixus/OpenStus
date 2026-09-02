@@ -124,7 +124,7 @@ public sealed class CommandLineArgs
     /// <summary>The usage text printed for <c>--help</c> and for a malformed command line.</summary>
     public static string UsageText =>
         """
-        Dvopan - a Far Manager style dual-pane file manager.
+        Dvopan - a dual-pane console file manager.
 
         Usage: oc [startPath] [options]
 
@@ -137,8 +137,8 @@ public sealed class CommandLineArgs
           --colors <mode>        auto (the default), truecolor or indexed;
                                  indexed keeps the terminal's own colour scheme
           --palette <name|file>  RGB values for the 16 colour slots, used by
-                                 truecolor: nt (the default, the table Far
-                                 installs), vga, campbell, or a JSON file
+                                 truecolor: nt (the default, the Windows NT
+                                 console table), vga, campbell, or a JSON file
           --view <1-9>           initial view mode for both panels
                                  1 Brief  2 Medium  3 Full  4 Wide  5 Detailed
           --clock <HH:mm|off>    pin the corner clock to a fixed time, or hide

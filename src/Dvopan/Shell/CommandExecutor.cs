@@ -13,8 +13,9 @@ namespace Dvopan.Shell;
 /// A command needs the real screen: it writes to stdout, it may prompt, it may draw its own
 /// progress. So the alternate screen buffer is left before the child starts and re-entered
 /// afterwards, which puts the command's output on the main screen where the scrollback keeps it and
-/// leaves the panels untouched underneath. The panels come back the moment the child exits - Far
-/// never pauses here - because the output stays on the main screen, where Ctrl+O can reveal it.
+/// leaves the panels untouched underneath. The panels come back the moment the child exits - there
+/// is no "press any key" pause, in the classic orthodox-file-manager fashion - because the output
+/// stays on the main screen, where Ctrl+O can reveal it.
 /// </para>
 /// <para>
 /// The console input mode needs the same handover: the raw mode the panels run under is a property
@@ -403,8 +404,8 @@ public static class CommandExecutor
     {
         terminal.RestoreConsoleInputMode();
 
-        // With the panels hidden (Ctrl+O) the shell asks to stay on the user screen, exactly as
-        // Far does after running a command with the panels off.
+        // With the panels hidden (Ctrl+O) the shell asks to stay on the user screen, as the classic
+        // orthodox file managers do after running a command with the panels off.
         if (altScreen)
         {
             terminal.ShowPanelsScreen();

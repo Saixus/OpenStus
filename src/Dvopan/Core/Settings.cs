@@ -66,7 +66,7 @@ public sealed class ColorModeJsonConverter : JsonConverter<ColorMode>
 /// </summary>
 /// <remarks>
 /// <para>
-/// Every property has the Far Manager default as its initialiser, so a brand new
+/// Every property carries its default as its initialiser, so a brand new
 /// <see cref="Settings"/> is already the shipping configuration and a settings file only has to
 /// carry the entries the user changed.
 /// </para>
@@ -120,8 +120,8 @@ public sealed class Settings
     public bool ConfirmDelete { get; set; } = true;
 
     /// <summary>
-    /// Ask a second time before deleting a folder that has content - Far keeps this question
-    /// separate from the general delete confirmation, and so does this flag.
+    /// Ask a second time before deleting a folder that has content. The question is kept separate
+    /// from the general delete confirmation, so this flag stands on its own.
     /// </summary>
     public bool ConfirmDeleteNonEmptyFolders { get; set; } = true;
 

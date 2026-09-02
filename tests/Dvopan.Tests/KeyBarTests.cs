@@ -54,7 +54,7 @@ public class KeyBarSetsTests
     }
 
     [Fact]
-    public void SparseRowsOnlyBindTheKeysFarBinds()
+    public void SparseRowsOnlyBindTheKeysTheTableLists()
     {
         KeyBarLabels ctrlShift = KeyBarSets.ForPanels(KeyMods.Ctrl | KeyMods.Shift);
         Assert.Equal("View", ctrlShift[2]);
@@ -189,8 +189,9 @@ public class KeyBarLayoutTests
     }
 
     /// <summary>
-    /// Eighty columns is the canonical Far width. The bar needs fifteen columns of key numbers and
-    /// sixty two of captions, so every cell must get what it asks for with three columns to spare.
+    /// Eighty columns is the canonical console width. The bar needs fifteen columns of key numbers
+    /// and sixty two of captions, so every cell must get what it asks for with three columns to
+    /// spare.
     /// </summary>
     [Fact]
     public void EveryCellGetsTheColumnsItsNumberAndCaptionNeed()
@@ -360,8 +361,8 @@ public class KeyBarDrawTests
     private static readonly Theme T = Theme.Classic();
 
     /// <summary>
-    /// The regression this bar was rebuilt for: at eighty columns Far shows all twelve captions, and
-    /// so must we - no "9Conf...", no "11Plu...", no "12Scr...".
+    /// The regression this bar was rebuilt for: at eighty columns the classic managers show all
+    /// twelve captions, and so must we - no "9Conf...", no "11Plu...", no "12Scr...".
     /// </summary>
     [Fact]
     public void TheUnmodifiedRowAtEightyColumnsShowsAllTwelveCaptions()

@@ -137,8 +137,8 @@ public sealed class KeyBindings
 
         // --- panel focus ---------------------------------------------------
         // Tab only switches panels while the command line is empty. With something typed it has to
-        // fall through to CommandLine, which completes the path under the caret - Far's behaviour,
-        // and the reason for the guard: the table is consulted first, so an unguarded Tab would make
+        // fall through to CommandLine, which completes the path under the caret like a shell does -
+        // the reason for the guard: the table is consulted first, so an unguarded Tab would make
         // completion unreachable. Shift+Tab has no second job and switches unconditionally.
         t.Add(KeyMods.None, ConsoleKey.Tab, "Switch the active panel", a => a.SwitchPanel(), CommandLineEmpty);
         t.Add(KeyMods.Shift, ConsoleKey.Tab, "Switch the active panel", a => a.SwitchPanel());

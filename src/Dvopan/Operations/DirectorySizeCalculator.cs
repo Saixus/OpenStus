@@ -10,7 +10,8 @@ namespace Dvopan.Operations;
 /// <param name="Directories">How many folders there are, not counting the one asked about.</param>
 /// <param name="Complete">
 /// <see langword="false"/> when the walk was cancelled or hit something it could not read, so the
-/// numbers are a lower bound. Far shows such a total with a leading <c>&gt;</c>.
+/// numbers are a lower bound. The classic convention shows such a total with a leading
+/// <c>&gt;</c>.
 /// </param>
 public readonly record struct DirectorySize(long Bytes, long Files, long Directories, bool Complete)
 {
@@ -41,7 +42,7 @@ public readonly record struct DirectorySize(long Bytes, long Files, long Directo
 }
 
 /// <summary>
-/// Adds up the recursive size of folders - what Far puts on the panel when the user presses the
+/// Adds up the recursive size of folders - what goes on the panel when the user presses the
 /// space bar on a folder, and what the folder-size column shows.
 /// </summary>
 /// <remarks>

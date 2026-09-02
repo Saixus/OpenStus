@@ -4,13 +4,13 @@ using Dvopan.Rendering;
 namespace Dvopan.Panels;
 
 /// <summary>
-/// Far's fast find: the incremental prefix search a panel starts when the user holds Alt and types.
+/// Fast find: the incremental prefix search a panel starts when the user holds Alt and types.
 /// </summary>
 /// <remarks>
 /// <para>
-/// The search is shown as a small box drawn over the panel's bottom frame and stays open - exactly
-/// like Far - until the user presses Escape or Enter, moves the cursor with an arrow key, or
-/// deletes the last character. There is no inactivity timeout.
+/// The search is shown as a small box drawn over the panel's bottom frame and stays open until
+/// the user presses Escape or Enter, moves the cursor with an arrow key, or deletes the last
+/// character. There is no inactivity timeout.
 /// </para>
 /// <para>
 /// Matching runs in two passes over the listing: first every name that <em>starts</em> with the typed
@@ -28,7 +28,7 @@ public sealed class QuickSearch
     /// <summary><see langword="true"/> while the search box is open.</summary>
     public bool IsActive { get; private set; }
 
-    /// <summary>The text typed so far; empty when the search is not running.</summary>
+    /// <summary>The text typed since the box opened; empty when the search is not running.</summary>
     public string Text => _text;
 
     /// <summary>When the last keystroke arrived, as handed to <see cref="Append"/> or <see cref="Backspace"/>.</summary>
@@ -50,7 +50,7 @@ public sealed class QuickSearch
     }
 
     /// <summary>
-    /// Removes the last character. Deleting the last one closes the box, exactly like Far.
+    /// Removes the last character. Deleting the last one closes the box.
     /// </summary>
     /// <param name="now">The current time, used to reset the inactivity timeout.</param>
     /// <returns><see langword="true"/> when the search is still running afterwards.</returns>

@@ -12,11 +12,11 @@ namespace Dvopan.Ui;
 /// <remarks>
 /// The dialog sizes itself to its content and is then clamped to the screen by
 /// <see cref="Dialog.Layout"/>; over-long body lines are truncated with an ellipsis rather than
-/// wrapped. The layout is Far's: a blank line, the body, a blank line, the buttons.
+/// wrapped. The layout is the classic one: a blank line, the body, a blank line, the buttons.
 /// </remarks>
 public sealed class MessageDialog : Dialog
 {
-    /// <summary>The buttons a message box can show, in the order Far lays them out.</summary>
+    /// <summary>The buttons a message box can show, in the order they are laid out.</summary>
     /// <remarks>
     /// Affirmative answers come first and Cancel last, so any set combining them - the overwrite
     /// prompt's Yes|No|All|SkipAll|Cancel, the error prompt's Retry|Skip|SkipAll|Cancel - starts

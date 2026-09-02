@@ -3,7 +3,7 @@ using Dvopan.Core;
 namespace Dvopan.Files;
 
 /// <summary>
-/// Orders panel entries the way Far does.
+/// Orders panel entries the way the classic orthodox file managers do.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -152,9 +152,9 @@ public sealed class FileEntryComparer : IComparer<FileEntry>
         _ => CompareNames(x.Name, y.Name),
     };
 
-    // A folder named "archive.old" is not an "old" file, and Far's default agrees: sorting by
-    // extension treats a directory's extension as empty, so directories order among themselves
-    // by the name fallback alone.
+    // A folder named "archive.old" is not an "old" file, and the classic orthodox-file-manager
+    // convention agrees: sorting by extension treats a directory's extension as empty, so
+    // directories order among themselves by the name fallback alone.
     private static string SortExtension(FileEntry e) => e.IsDirectory ? string.Empty : e.Extension;
 
     private int CompareNames(string a, string b)

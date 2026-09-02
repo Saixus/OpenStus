@@ -27,8 +27,8 @@ namespace Dvopan.Panels;
 /// </para>
 /// <para>
 /// <b>Cursor and scroll are independent.</b> Moving the cursor pulls the window along, but the mouse
-/// wheel scrolls the window on its own and leaves the cursor where it is - the same as Far. Both are
-/// clamped on every frame, so resizing the panel can never leave either one out of range.
+/// wheel scrolls the window on its own and leaves the cursor where it is. Both are clamped on
+/// every frame, so resizing the panel can never leave either one out of range.
 /// </para>
 /// </remarks>
 public sealed class FilePanel : IFilePanel
@@ -42,8 +42,8 @@ public sealed class FilePanel : IFilePanel
     /// <summary>How many rows one wheel notch scrolls.</summary>
     public const int WheelRows = 3;
 
-    // Far draws the outer frame double and everything inside it - the column dividers and the
-    // status separator - single, so the two styles are deliberately distinct here.
+    // The classic DOS-era console look draws the outer frame double and everything inside it - the
+    // column dividers and the status separator - single, so the two styles are deliberately distinct.
     private const BoxStyle Frame = BoxStyle.Double;
     private const BoxStyle InnerFrame = BoxStyle.Single;
     private const string DateFormat = "MM/dd/yy";
@@ -54,7 +54,7 @@ public sealed class FilePanel : IFilePanel
     private readonly QuickSearch _quickSearch = new();
 
     // Tabs, each remembering a folder and the way it was being looked at. There is always at least
-    // one; the strip is only drawn once there are two, so a single-tab panel looks exactly like Far.
+    // one; the strip is only drawn once there are two, so a single-tab panel keeps the classic look.
     private readonly List<PanelTab> _tabs = [new PanelTab()];
     private int _tabIndex;
 
@@ -306,8 +306,8 @@ public sealed class FilePanel : IFilePanel
     }
 
     /// <summary>
-    /// Changes the sort key. Asking for the key that is already active toggles the direction, exactly
-    /// like pressing Ctrl+F3 twice in Far.
+    /// Changes the sort key. Asking for the key that is already active toggles the direction, so
+    /// pressing the same sort key twice reverses the order.
     /// </summary>
     /// <param name="mode">The sort key.</param>
     public void SetSort(SortMode mode)
@@ -676,7 +676,7 @@ public sealed class FilePanel : IFilePanel
                 HAlign.Center);
         }
 
-        // Far marks the sort mode with a letter in the top-left header cell: lowercase ascending,
+        // The sort mode is marked with a letter in the top-left header cell: lowercase ascending,
         // uppercase descending ("n" = by name, "s" = by size, ...).
         buffer.Set(x + 1, headerRow, SortIndicator(), Theme.PanelText);
 
@@ -725,7 +725,7 @@ public sealed class FilePanel : IFilePanel
         buffer.Set(right, y, BoxChars.TopRight(Frame), box);
 
         // The double verticals run all the way down to the bottom corners - through the status
-        // row too, which Far keeps inside the frame; the ╟──╢ separator below overwrites its own
+        // row too, which sits inside the frame; the ╟──╢ separator below overwrites its own
         // two edge cells with the tees.
         for (int row = y + 1; row < bottom; row++)
         {
@@ -735,7 +735,7 @@ public sealed class FilePanel : IFilePanel
 
         if (ShowStatusBar)
         {
-            // A single-line separator meeting the double vertical edges, Far style: ╟────╢.
+            // A single-line separator meeting the double vertical edges with tees: ╟────╢.
             int separator = bottom - 2;
             buffer.Set(x, separator, BoxChars.LeftTee(BoxStyle.SingleV), box);
             buffer.HLine(x + 1, separator, inner, BoxChars.Horizontal(InnerFrame), box);
@@ -807,8 +807,8 @@ public sealed class FilePanel : IFilePanel
                     PanelColumn column = layout.Column(s, f);
                     if (f > 0)
                     {
-                        // Far recolours the dividers that fall inside the cursor row so the bar
-                        // reads as one unbroken block; the dividers *between* stripes keep the
+                        // The dividers that fall inside the cursor row take the bar's colour so
+                        // it reads as one unbroken block; the dividers *between* stripes keep the
                         // frame colour and are left alone.
                         buffer.Set(left + column.X - 1, rowY, vertical, onCursor ? style : box);
                     }
@@ -828,7 +828,7 @@ public sealed class FilePanel : IFilePanel
     /// <summary>
     /// The tab strip on the row under the top frame: each tab's folder name, the shown one in the
     /// active-title colours, single dividers between. When the strip is wider than the panel it
-    /// starts as far right as it must for the shown tab to be on screen. The cells each caption
+    /// shifts right just enough for the shown tab to be on screen. The cells each caption
     /// occupies are remembered for the mouse.
     /// </summary>
     private void DrawTabs(ScreenBuffer buffer, Rect b, CellStyle box)
@@ -959,8 +959,8 @@ public sealed class FilePanel : IFilePanel
         int row = b.Y + b.Height - 1;
         int available = b.Width - 2;
 
-        // Once anything is tagged the line shows the selection, and Far paints that in yellow
-        // (COL_PANELSELECTEDINFO) - pressing Ins is visible at the bottom too.
+        // Once anything is tagged the line shows the selection, painted in yellow so that
+        // pressing Ins is visible at the bottom too.
         CellStyle style = HasSelection ? Theme.PanelSelectedTotals : Theme.PanelTotals;
 
         if (totals.Length > available)
@@ -1031,7 +1031,7 @@ public sealed class FilePanel : IFilePanel
     /// <summary>The text one column shows for one entry.</summary>
     /// <param name="entry">The entry.</param>
     /// <param name="kind">The column kind.</param>
-    /// <returns>The text; names start flush at the column's first cell, as in Far.</returns>
+    /// <returns>The text; names start flush at the column's first cell, with no leading padding.</returns>
     public static string CellText(FileEntry entry, PanelColumnKind kind)
     {
         ArgumentNullException.ThrowIfNull(entry);
@@ -1054,8 +1054,8 @@ public sealed class FilePanel : IFilePanel
     /// <returns>The marker, or <see langword="null"/> for a plain file.</returns>
     /// <remarks>
     /// The Size column and the status line both go through here, so the two can never end up
-    /// disagreeing about the same entry. Far shows the bare word in both places - no angle
-    /// brackets - and so does this panel; the word itself is decided in exactly one place.
+    /// disagreeing about the same entry. The panel shows the bare word in both places - no angle
+    /// brackets - and the word itself is decided in exactly one place.
     /// </remarks>
     private static string? DirectoryMarker(FileEntry entry)
     {
@@ -1073,7 +1073,7 @@ public sealed class FilePanel : IFilePanel
     }
 
     /// <summary>
-    /// The sort letter Far shows in the top-left header cell: <c>n</c> by name, <c>x</c> by
+    /// The sort letter shown in the top-left header cell: <c>n</c> by name, <c>x</c> by
     /// extension, <c>w</c> by write time, <c>s</c> by size, <c>u</c> unsorted, <c>c</c> by creation
     /// time, <c>a</c> by access time, <c>z</c> by description, <c>o</c> by owner - uppercase when
     /// the sort is reversed.
@@ -1099,7 +1099,7 @@ public sealed class FilePanel : IFilePanel
 
     private static string SizeCellText(FileEntry entry)
     {
-        // The bare word, Far style: the column is right aligned, so letting HAlign.Right do the
+        // The bare word, no brackets: the column is right aligned, so letting HAlign.Right do the
         // work is what keeps "Up" flush with the byte counts above and below it.
         string? marker = DirectoryMarker(entry);
         if (marker is not null)
@@ -1107,7 +1107,7 @@ public sealed class FilePanel : IFilePanel
             return marker;
         }
 
-        // Far's size column shows plain ungrouped digits while they fit and the compact form once
+        // The size column shows plain ungrouped digits while they fit and the compact form once
         // they do not; the grouped form belongs to the status and totals lines, not the column.
         string exact = entry.Size.ToString(CultureInfo.InvariantCulture);
         return exact.Length <= PanelColumn.SizeWidth ? exact : SizeFormatter.Short(entry.Size);
@@ -1118,7 +1118,7 @@ public sealed class FilePanel : IFilePanel
     /// cursor &gt; tagged &gt; hidden or system &gt; directory &gt; archive &gt; executable &gt; plain file.
     /// </summary>
     /// <remarks>
-    /// Hidden and system deliberately outrank directory. In Far, <c>$Recycle.Bin</c>,
+    /// Hidden and system deliberately outrank directory. A drive root's <c>$Recycle.Bin</c>,
     /// <c>ProgramData</c> and <c>System Volume Information</c> are all dim grey even though they are
     /// folders - the dimming is how the panel says "not your business", and a folder is exactly the
     /// kind of entry that most needs to recede. Ranking directory first instead made every
@@ -1169,7 +1169,7 @@ public sealed class FilePanel : IFilePanel
 
         if ((mods & KeyMods.Shift) == 0)
         {
-            // Far decides select-versus-deselect once per Shift gesture; any other key ends it.
+            // Select-versus-deselect is decided once per Shift gesture; any other key ends it.
             _shiftSelection = null;
         }
 
@@ -1671,7 +1671,7 @@ public sealed class FilePanel : IFilePanel
         }
 
         // The same quoting rule as Ctrl+J: the help screen documents the two as one command, so a
-        // name with a space must arrive quoted from either key. Far also appends a space after a
+        // name with a space must arrive quoted from either key. A space is appended after each
         // Ctrl+Enter insertion, which is what lets repeated presses build up an argument list.
         string text = name.Contains(' ', StringComparison.Ordinal) ? "\"" + name + "\"" : name;
         app.InsertIntoCommandLine(text + " ");

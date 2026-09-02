@@ -45,7 +45,7 @@ public enum DialogResult
 
 /// <summary>
 /// The buttons a message box offers. Combine with <c>|</c>; the buttons are laid out left to right
-/// in the order the flags are declared here, which matches Far Manager.
+/// in the order the flags are declared here - the classic dialog order.
 /// </summary>
 [Flags]
 public enum MessageButtons

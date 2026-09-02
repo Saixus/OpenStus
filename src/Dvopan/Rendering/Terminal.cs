@@ -300,8 +300,8 @@ public sealed class Terminal : IDisposable
 
     /// <summary>
     /// Leaves the alternate screen buffer so the primary one - the user screen, with the output of
-    /// every command run so far - becomes visible. This is what Ctrl+O shows in Far: the point of
-    /// the key is that command output survives underneath the panels. While the user screen is up
+    /// every command run so far - becomes visible. This is what Ctrl+O shows: the point of the key
+    /// is that command output survives underneath the panels. While the user screen is up
     /// the caller must not <see cref="Render"/>; a frame written now would scribble over the very
     /// output being shown. A no-op when headless or already on the primary buffer.
     /// </summary>

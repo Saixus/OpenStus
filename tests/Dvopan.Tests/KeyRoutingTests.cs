@@ -333,7 +333,7 @@ public class KeyRoutingTests
         Assert.Equal(string.Empty, app.CommandLineWidget.Text);
     }
 
-    /// <summary>Ctrl+Enter walks to the next match while the box is open, as in Far.</summary>
+    /// <summary>Ctrl+Enter walks to the next match while the box is open.</summary>
     [Fact]
     public void QuickSearchCtrlEnterWalksToTheNextMatch()
     {
@@ -394,7 +394,7 @@ public class KeyRoutingTests
         path.Contains(' ', StringComparison.Ordinal) ? "\"" + path + "\"" : path;
 
     /// <summary>
-    /// Far's Ctrl+[ and Ctrl+] put the left and the right panel's folder on the command line, each
+    /// Ctrl+[ and Ctrl+] put the left and the right panel's folder on the command line, each
     /// with a trailing space so the next argument can follow at once.
     /// </summary>
     [Fact]
@@ -452,7 +452,7 @@ public class KeyRoutingTests
     // ------------------------------------------------------------- F8 / Shift+F8
 
     /// <summary>
-    /// Far's Shift+F8 ignores the selection and deletes only the item under the cursor; the
+    /// Shift+F8 ignores the selection and deletes only the item under the cursor; the
     /// permanent, bypass-the-recycle-bin variant lives on Shift+Del.
     /// </summary>
     [Fact]
@@ -514,7 +514,7 @@ public class KeyRoutingTests
     // ------------------------------------------------------------- non-empty folder confirmation
 
     /// <summary>
-    /// Deleting a folder with content asks a second time, as Far does. Headless, the question
+    /// Deleting a folder with content asks a second time. Headless, the question
     /// cannot be answered, so the observable behaviour is that the folder survives even with the
     /// general delete confirmation switched off.
     /// </summary>

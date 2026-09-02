@@ -5,8 +5,8 @@ namespace Dvopan.Ui.Controls;
 
 /// <summary>
 /// A two-state check box drawn as <c>[x] Caption</c>, toggled with Space, a click or its
-/// Alt+hotkey. Enter is left for the dialog, which presses the default button - as in Far, where
-/// confirming a dialog never flips the option the focus happens to sit on.
+/// Alt+hotkey. Enter is left for the dialog, which presses the default button - confirming a
+/// dialog never flips the option the focus happens to sit on.
 /// </summary>
 public sealed class CheckBoxControl : DialogControl
 {

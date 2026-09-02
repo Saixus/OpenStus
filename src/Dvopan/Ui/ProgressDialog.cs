@@ -17,7 +17,7 @@ namespace Dvopan.Ui;
 /// <see cref="Complete"/> - otherwise a half-copied file would be left behind the moment the user
 /// hit Esc. Enter is swallowed outright: the dialog often appears right after an input dialog was
 /// confirmed with Enter, and a type-ahead or double-tapped Enter must not cancel the operation the
-/// user just started - Far's progress boxes only react to Esc.
+/// user just started - a progress box only reacts to Esc.
 /// </para>
 /// <para>
 /// The bars are painted with <c>ProgressBar</c> over <c>ProgressBarEmpty</c>, using the full block
@@ -135,7 +135,7 @@ public sealed class ProgressDialog : Dialog
         {
             // Swallowed before the focused Cancel button can see it: a type-ahead Enter from
             // the dialog that launched the operation must not abort it. Only Esc, Space on the
-            // button, or a click cancel - exactly like Far's progress boxes.
+            // button, or a click cancel.
             return true;
         }
 

@@ -27,7 +27,7 @@ public enum PanelColumnKind
 /// </summary>
 /// <remarks>
 /// <para>
-/// A panel is divided into <em>stripes</em> - the repeated column groups Far fills newspaper style -
+/// A panel is divided into <em>stripes</em> - the repeated column groups filled newspaper style -
 /// and every stripe carries the same list of fields. <see cref="Stripe"/> says which group this
 /// column is part of, and <see cref="X"/> is measured from the first cell inside the left frame, so
 /// the screen column is <c>panel.X + 1 + column.X</c>.
