@@ -1579,8 +1579,8 @@ public class ClipboardTests
     {
         var clipboard = new Clipboard { UseNative = false };
 
-        Assert.True(clipboard.SetText("open commander"));
-        Assert.Equal("open commander", clipboard.GetText());
+        Assert.True(clipboard.SetText("dvopan"));
+        Assert.Equal("dvopan", clipboard.GetText());
     }
 
     [Fact]

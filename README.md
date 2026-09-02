@@ -20,25 +20,25 @@ and behaves the same in Windows Terminal, conhost, and any terminal emulator on 
 Rendered with
 
 ```
-oc --screenshot --size 120x28 --clock 10:06 --left . --right ./src/Dvopan/Rendering
+oc --screenshot --size 120x28 --clock 10:06 --left . --right ./src/Dvopan/Text/Syntax
 ```
 
 ```
-╔═════════════ C:\Work\!Lab\Git\Dvopan ═════════════╗╔═══ …it\Dvopan\src\Dvopan\Rendering ═10:06 AM
+╔═════════════════════ C:\Work\dvopan ═════════════════════╗╔═════════ C:\Work\dvopan\src\Dvopan\Text\Syntax ═══10:06 AM
 ║n           Name             │            Name            ║║n           Name             │            Name            ║
 ║..                           │                            ║║..                           │                            ║
-║.git                         │                            ║║BoxChars.cs                  │                            ║
-║.github                      │                            ║║Cell.cs                      │                            ║
-║.vs                          │                            ║║CellStyle.cs                 │                            ║
-║src                          │                            ║║ColorDepth.cs                │                            ║
-║tests                        │                            ║║Palette.cs                   │                            ║
-║.editorconfig                │                            ║║Rect.cs                      │                            ║
-║.gitignore                   │                            ║║ScreenBuffer.cs              │                            ║
-║CHANGELOG.md                 │                            ║║Terminal.cs                  │                            ║
+║.github                      │                            ║║LineStateCache.cs            │                            ║
+║docs                         │                            ║║SyntaxRegistry.cs            │                            ║
+║src                          │                            ║║SyntaxRules.cs               │                            ║
+║tests                        │                            ║║SyntaxTokenizer.cs           │                            ║
+║.editorconfig                │                            ║║                             │                            ║
+║.gitignore                   │                            ║║                             │                            ║
+║CHANGELOG.md                 │                            ║║                             │                            ║
 ║CONTRIBUTING.md              │                            ║║                             │                            ║
 ║Directory.Build.props        │                            ║║                             │                            ║
+║Dvopan.sln                   │                            ║║                             │                            ║
 ║LICENSE                      │                            ║║                             │                            ║
-║Dvopan.sln            │                            ║║                             │                            ║
+║NOTICE.md                    │                            ║║                             │                            ║
 ║README.md                    │                            ║║                             │                            ║
 ║                             │                            ║║                             │                            ║
 ║                             │                            ║║                             │                            ║
@@ -48,9 +48,9 @@ oc --screenshot --size 120x28 --clock 10:06 --left . --right ./src/Dvopan/Render
 ║                             │                            ║║                             │                            ║
 ║                             │                            ║║                             │                            ║
 ╟──────────────────────────────────────────────────────────╢╟──────────────────────────────────────────────────────────╢
-║..                                     Up  08/28/26  19:21║║..                                     Up  08/30/26  21:38║
-╚══════════ Bytes: 51.3 K, files: 8, folders: 5 ═══════════╝╚══════════ Bytes: 82.8 K, files: 8, folders: 0 ═══════════╝
-C:\Work\!Lab\Git\Dvopan>
+║..                                     Up  09/02/26  16:33║║..                                     Up  09/02/26  16:33║
+╚══════════ Bytes: 19.2 K, files: 9, folders: 4 ═══════════╝╚══════════ Bytes: 22.1 K, files: 4, folders: 0 ═══════════╝
+C:\Work\dvopan>
 1Help    2UserMn    3View    4Edit    5Copy    6RenMov    7MkFold    8Delete   9ConfMn   10Quit   11Plugin   12Screen
 ```
 
