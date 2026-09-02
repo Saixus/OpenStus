@@ -384,6 +384,7 @@ generated from `HelpScreen.Bindings`, so they cannot drift apart.
 | `Ctrl+Y` | Clear the line |
 | `Up / Down` | Walk the history of commands starting like the typed text |
 | `Ctrl+E / Ctrl+X` | Walk the whole command history |
+| `Ctrl+R` | Search the history backwards as you type (Ctrl+S forwards); needs text, or hidden panels |
 | `Right / End` | Accept the grey suggestion after the caret |
 | `Tab` | Complete the file name under the caret; a list when several match |
 | `Ctrl+Left / Ctrl+Right` | Move one word |

@@ -316,6 +316,7 @@ public sealed class HelpScreen : IScreenComponent
         ("Command line", "Ctrl+Y", "Clear the line"),
         ("Command line", "Up / Down", "Walk the history of commands starting like the typed text"),
         ("Command line", "Ctrl+E / Ctrl+X", "Walk the whole command history"),
+        ("Command line", "Ctrl+R", "Search the history backwards as you type (Ctrl+S forwards); needs text, or hidden panels"),
         ("Command line", "Right / End", "Accept the grey suggestion after the caret"),
         ("Command line", "Tab", "Complete the file name under the caret; a list when several match"),
         ("Command line", "Ctrl+Left / Ctrl+Right", "Move one word"),

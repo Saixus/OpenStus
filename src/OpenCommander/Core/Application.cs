@@ -796,6 +796,12 @@ public sealed class Application : IAppContext, IDisposable
                 {
                     _commandLine.RecallHistory(previous: key.Key == ConsoleKey.UpArrow);
                 }
+                else if (key.Mods == KeyMods.Ctrl && key.Key == ConsoleKey.R)
+                {
+                    // No panel to re-read here, so Ctrl+R on an empty line is the shell's: a
+                    // reverse search through the history.
+                    _commandLine.StartReverseSearch();
+                }
             }
 
             return;

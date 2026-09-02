@@ -55,6 +55,13 @@ public sealed class CommandLine
     private int _scroll;
     private string? _pendingLine;
 
+    // Reverse search (Ctrl+R): the query typed so far, the history index of the current match or
+    // -1, and the line as it was before the search began, so Escape can put it back.
+    private bool _searching;
+    private string _searchQuery = string.Empty;
+    private int _searchIndex = -1;
+    private string _searchOriginal = string.Empty;
+
     /// <summary>
     /// Creates a command line.
     /// </summary>
@@ -78,7 +85,37 @@ public sealed class CommandLine
     /// the end of a line the user is typing, never in the middle of a recall.
     /// </summary>
     public string? Suggestion =>
-        _text.Length > 0 && _caret == _text.Length && History.Cursor < 0 ? History.Suggest(_text) : null;
+        !_searching && _text.Length > 0 && _caret == _text.Length && History.Cursor < 0 ? History.Suggest(_text) : null;
+
+    /// <summary><see langword="true"/> while a Ctrl+R reverse search is running.</summary>
+    public bool IsSearching => _searching;
+
+    /// <summary>The reverse-search query typed so far; empty when not searching.</summary>
+    public string SearchQuery => _searching ? _searchQuery : string.Empty;
+
+    /// <summary>
+    /// Starts a reverse search through the history, bash style: the prompt turns into
+    /// <c>(reverse-i-search)'query':</c>, every typed character narrows the query, Ctrl+R steps to
+    /// an older match and Ctrl+S to a newer one, Enter keeps the match on the line, Escape puts
+    /// the original line back, and any other key keeps the match and is handled as usual. Whatever
+    /// is on the line when the search starts becomes the initial query.
+    /// </summary>
+    public void StartReverseSearch()
+    {
+        if (_searching)
+        {
+            return;
+        }
+
+        _searching = true;
+        _searchOriginal = _text;
+        _searchQuery = _text;
+        _searchIndex = -1;
+        History.ResetCursor();
+        _pendingLine = null;
+
+        SearchFrom(0, step: 1);
+    }
 
     /// <summary>
     /// The clipboard Shift+Ins and Ctrl+V paste from. Assignable so a test can substitute an
@@ -137,7 +174,9 @@ public sealed class CommandLine
         }
 
         int width = buf.Width;
-        string prompt = Prefix + PromptSuffix;
+        string prompt = _searching
+            ? "(reverse-i-search)'" + _searchQuery + "': "
+            : Prefix + PromptSuffix;
 
         int promptWidth = Math.Min(prompt.Length, Math.Max(0, width - MinTextWidth));
         if (promptWidth <= 0 && width > 0)
@@ -160,9 +199,32 @@ public sealed class CommandLine
         buf.WriteFixed(promptWidth, y, textWidth, visible, _theme.CommandLineText);
         DrawColouring(buf, y, promptWidth, textWidth);
         DrawSuggestion(buf, y, promptWidth, textWidth);
+        DrawSearchMatch(buf, y, promptWidth, textWidth);
 
         CaretY = y;
         CaretX = Math.Clamp(promptWidth + (_caret - _scroll), 0, Math.Max(0, width - 1));
+    }
+
+    /// <summary>Highlights where the reverse-search query sits inside the matched command.</summary>
+    private void DrawSearchMatch(ScreenBuffer buf, int y, int promptWidth, int textWidth)
+    {
+        if (!_searching || _searchIndex < 0 || _searchQuery.Length == 0)
+        {
+            return;
+        }
+
+        int at = _text.IndexOf(_searchQuery, StringComparison.OrdinalIgnoreCase);
+        if (at < 0)
+        {
+            return;
+        }
+
+        int x0 = Math.Max(0, at - _scroll);
+        int x1 = Math.Min(textWidth, at + _searchQuery.Length - _scroll);
+        if (x1 > x0)
+        {
+            buf.FillStyle(new Rect(promptWidth + x0, y, x1 - x0, 1), _theme.CommandLineSelected);
+        }
     }
 
     /// <summary>Recolours the command, options, strings and variables of the visible text.</summary>
@@ -270,16 +332,28 @@ public sealed class CommandLine
     /// </returns>
     public bool HandleKey(KeyEvent key, IAppContext ctx)
     {
+        if (_searching && HandleSearchKey(key))
+        {
+            return true;
+        }
+
         bool empty = IsEmpty;
 
         // Ctrl chords first: several of them work whether or not the line has text, and the rest
-        // have to fall through to the panel (Ctrl+R, Ctrl+U and friends live there).
+        // have to fall through to the panel (Ctrl+U and friends live there).
         if ((key.Mods & KeyMods.Ctrl) != 0 && (key.Mods & KeyMods.Alt) == 0)
         {
             switch (key.Key)
             {
                 case ConsoleKey.Y:
                     Clear();
+                    return true;
+
+                // Ctrl+R searches the history when there is text to search with; on an empty line
+                // it stays Far's re-read of the panel (the shell starts a search there itself while
+                // Ctrl+O hides the panels, when there is no panel to re-read).
+                case ConsoleKey.R when !empty:
+                    StartReverseSearch();
                     return true;
 
                 case ConsoleKey.E:
@@ -482,6 +556,104 @@ public sealed class CommandLine
     /// <param name="previous">Whether to step backwards rather than forwards.</param>
     /// <returns>Always <see langword="true"/>; the key is consumed either way.</returns>
     public bool RecallHistory(bool previous) => previous ? RecallPrevious(byPrefix: false) : RecallNext(byPrefix: false);
+
+    /// <summary>
+    /// The keys that mean something inside a reverse search. Returns <see langword="false"/> for a
+    /// key that ends the search and must then be handled as usual - an arrow, Home, End, Tab.
+    /// </summary>
+    private bool HandleSearchKey(KeyEvent key)
+    {
+        bool ctrl = (key.Mods & KeyMods.Ctrl) != 0;
+
+        if (ctrl && key.Key == ConsoleKey.R)
+        {
+            SearchFrom(_searchIndex + 1, step: 1);
+            return true;
+        }
+
+        if (ctrl && key.Key == ConsoleKey.S)
+        {
+            SearchFrom(_searchIndex - 1, step: -1);
+            return true;
+        }
+
+        switch (key.Key)
+        {
+            case ConsoleKey.Escape:
+                EndSearch(keepMatch: false);
+                return true;
+
+            case ConsoleKey.Enter:
+                EndSearch(keepMatch: true);
+                return true;
+
+            case ConsoleKey.Backspace when !ctrl:
+                if (_searchQuery.Length > 0)
+                {
+                    _searchQuery = _searchQuery[..^1];
+                    SearchFrom(0, step: 1);
+                }
+
+                return true;
+
+            default:
+                if (key.IsPlainChar)
+                {
+                    // Narrowing: the current match is tried first, exactly like bash, so the line
+                    // only jumps when it has to.
+                    _searchQuery += key.Ch;
+                    SearchFrom(Math.Max(0, _searchIndex), step: 1);
+                    return true;
+                }
+
+                EndSearch(keepMatch: true);
+                return false;
+        }
+    }
+
+    /// <summary>
+    /// Moves to the nearest history entry containing the query, scanning from
+    /// <paramref name="from"/> towards older (<c>step</c> 1) or newer (<c>step</c> -1) entries.
+    /// A miss leaves the current match where it is, as bash's "failing" search does.
+    /// </summary>
+    private void SearchFrom(int from, int step)
+    {
+        IReadOnlyList<string> all = History.All;
+        for (int i = from; i >= 0 && i < all.Count; i += step)
+        {
+            if (all[i].Contains(_searchQuery, StringComparison.OrdinalIgnoreCase))
+            {
+                _searchIndex = i;
+                _text = all[i];
+                _caret = _text.Length;
+                return;
+            }
+        }
+
+        if (_searchIndex < 0)
+        {
+            // Nothing has matched yet: keep showing the line the search started from.
+            _text = _searchOriginal;
+            _caret = _text.Length;
+        }
+    }
+
+    private void EndSearch(bool keepMatch)
+    {
+        _searching = false;
+
+        if (!keepMatch)
+        {
+            _text = _searchOriginal;
+            _caret = _text.Length;
+        }
+
+        _searchQuery = string.Empty;
+        _searchIndex = -1;
+        _searchOriginal = string.Empty;
+        History.ResetCursor();
+        _pendingLine = null;
+    }
 
     /// <summary>
     /// Takes the ghost suggestion onto the line - all of it, or just its next word.

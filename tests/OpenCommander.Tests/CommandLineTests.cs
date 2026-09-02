@@ -416,7 +416,6 @@ public class CommandLineRoutingTests
     }
 
     [Theory]
-    [InlineData(ConsoleKey.R)]
     [InlineData(ConsoleKey.U)]
     [InlineData(ConsoleKey.Enter)]
     [InlineData(ConsoleKey.F)]
@@ -1713,5 +1712,131 @@ public class CommandLineTabCompletionTests : IDisposable
         Assert.Equal("\"two w\"", PathCompletion.CommonPrefix(["\"two words\\\"", "\"two wide.txt\""]));
         Assert.Equal(string.Empty, PathCompletion.CommonPrefix(["a", "b"]));
         Assert.Equal(string.Empty, PathCompletion.CommonPrefix([]));
+    }
+}
+
+/// <summary>Ctrl+R: the incremental reverse search through the history.</summary>
+public class CommandLineReverseSearchTests
+{
+    private static (CommandLine Line, RecordingContext Ctx) New(params string[] oldestFirst)
+    {
+        var history = new CommandHistory();
+        foreach (string entry in oldestFirst)
+        {
+            history.Add(entry);
+        }
+
+        var ctx = new RecordingContext();
+        return (new CommandLine(ctx.Theme, history), ctx);
+    }
+
+    private static KeyEvent Ctrl(ConsoleKey key) => Keys.Key(key, KeyMods.Ctrl);
+
+    [Fact]
+    public void CtrlRWithTextSearchesForItAndStepsOlderOnRepeat()
+    {
+        (CommandLine line, RecordingContext ctx) = New("git status", "dir", "git push", "dotnet build");
+        Keys.Type(line, ctx, "git");
+
+        Assert.True(line.HandleKey(Ctrl(ConsoleKey.R), ctx));
+        Assert.True(line.IsSearching);
+        Assert.Equal("git", line.SearchQuery);
+        Assert.Equal("git push", line.Text); // the newest match
+
+        line.HandleKey(Ctrl(ConsoleKey.R), ctx);
+        Assert.Equal("git status", line.Text); // the older one
+
+        line.HandleKey(Ctrl(ConsoleKey.R), ctx);
+        Assert.Equal("git status", line.Text); // nothing older: stays put
+
+        line.HandleKey(Ctrl(ConsoleKey.S), ctx);
+        Assert.Equal("git push", line.Text); // and back towards the newest
+    }
+
+    [Fact]
+    public void TypingNarrowsTheQueryAndBackspaceWidensIt()
+    {
+        (CommandLine line, RecordingContext ctx) = New("git status", "git push", "dotnet build");
+        Keys.Type(line, ctx, "g");
+        line.HandleKey(Ctrl(ConsoleKey.R), ctx);
+        Assert.Equal("git push", line.Text);
+
+        line.HandleKey(Keys.Char('i'), ctx);
+        line.HandleKey(Keys.Char('t'), ctx);
+        line.HandleKey(Keys.Char(' '), ctx);
+        line.HandleKey(Keys.Char('s'), ctx);
+        Assert.Equal("git s", line.SearchQuery);
+        Assert.Equal("git status", line.Text);
+
+        line.HandleKey(Keys.Key(ConsoleKey.Backspace), ctx);
+        Assert.Equal("git ", line.SearchQuery);
+        Assert.Equal("git push", line.Text); // widened: the newest match again
+
+        // A query nothing contains keeps the current match, the way bash's "failing" search does.
+        line.HandleKey(Keys.Char('z'), ctx);
+        Assert.Equal("git push", line.Text);
+    }
+
+    [Fact]
+    public void EnterKeepsTheMatchAndEscapeRestoresTheOriginalLine()
+    {
+        (CommandLine line, RecordingContext ctx) = New("dotnet build", "dotnet test");
+        Keys.Type(line, ctx, "net");
+
+        line.HandleKey(Ctrl(ConsoleKey.R), ctx);
+        Assert.Equal("dotnet test", line.Text);
+
+        Assert.True(line.HandleKey(Keys.Key(ConsoleKey.Escape), ctx));
+        Assert.False(line.IsSearching);
+        Assert.Equal("net", line.Text);
+        Assert.Empty(ctx.Commands);
+
+        line.HandleKey(Ctrl(ConsoleKey.R), ctx);
+        Assert.True(line.HandleKey(Keys.Key(ConsoleKey.Enter), ctx));
+        Assert.False(line.IsSearching);
+        Assert.Equal("dotnet test", line.Text);
+        Assert.Empty(ctx.Commands); // Enter keeps the line; the next Enter runs it
+    }
+
+    [Fact]
+    public void AnArrowEndsTheSearchKeepingTheMatchAndIsThenHandledAsUsual()
+    {
+        (CommandLine line, RecordingContext ctx) = New("dotnet build");
+        Keys.Type(line, ctx, "build");
+        line.HandleKey(Ctrl(ConsoleKey.R), ctx);
+        Assert.Equal("dotnet build", line.Text);
+
+        Assert.True(line.HandleKey(Keys.Key(ConsoleKey.LeftArrow), ctx));
+        Assert.False(line.IsSearching);
+        Assert.Equal("dotnet build", line.Text);
+        Assert.Equal("dotnet build".Length - 1, line.Caret);
+    }
+
+    [Fact]
+    public void CtrlROnAnEmptyLineStillBelongsToThePanel()
+    {
+        (CommandLine line, RecordingContext ctx) = New("dir");
+
+        Assert.False(line.HandleKey(Ctrl(ConsoleKey.R), ctx));
+        Assert.False(line.IsSearching);
+    }
+
+    [Fact]
+    public void ThePromptShowsTheQueryAndTheMatchIsHighlighted()
+    {
+        (CommandLine line, RecordingContext ctx) = New("dotnet build");
+        Keys.Type(line, ctx, "net");
+        line.HandleKey(Ctrl(ConsoleKey.R), ctx);
+
+        var buf = new ScreenBuffer(80, 1);
+        line.Draw(buf, 0, @"C:\Work");
+        string row = buf.RenderPlainText().TrimEnd();
+
+        const string Prompt = "(reverse-i-search)'net': ";
+        Assert.StartsWith(Prompt + "dotnet build", row, StringComparison.Ordinal);
+        Assert.Equal(ctx.Theme.CommandLinePrefix, buf.Get(0, 0).Style);
+        Assert.Equal(ctx.Theme.CommandLineSelected, buf.Get(Prompt.Length + 3, 0).Style); // the 'n' of net
+        Assert.Equal(ctx.Theme.CommandLineCommand, buf.Get(Prompt.Length, 0).Style);      // 'd' of dotnet
+        Assert.Null(line.Suggestion);
     }
 }
