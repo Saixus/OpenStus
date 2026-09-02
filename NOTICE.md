@@ -2,7 +2,7 @@
 
 ## Far Manager
 
-Open Commander is an independent, from-scratch implementation. It deliberately reproduces the
+Dvopan is an independent, from-scratch implementation. It deliberately reproduces the
 *defaults* that make a Far Manager user feel at home - the default colour scheme, the function key
 bar captions, the panel layout and the keyboard conventions - so that the muscle memory carries over.
 Those defaults were read from Far Manager's published sources (`palette.cpp`, `interf.cpp` and the
@@ -11,7 +11,7 @@ source code is included.
 
 Far Manager is copyright (c) 1996 Eugene Roshal and (c) 2000 Far Group, and is distributed under the
 BSD 3-Clause License reproduced below. "Far Manager" and "Far" are the names of that project and are
-used here only to describe compatibility and inspiration. Open Commander is not affiliated with,
+used here only to describe compatibility and inspiration. Dvopan is not affiliated with,
 endorsed by, or sponsored by the Far Manager project or Far Group.
 
 ```
@@ -45,4 +45,4 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ## Other names
 
 Norton Commander, Total Commander, Windows Terminal and PowerShell are the names of their respective
-owners' products and are mentioned only to describe conventions Open Commander follows.
+owners' products and are mentioned only to describe conventions Dvopan follows.

@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to Open Commander are recorded here. The format follows
+All notable changes to Dvopan are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
@@ -225,5 +225,5 @@ The first release: a working dual-pane file manager.
 - `F12` lists the open screens, which at the panel level means just the panels themselves — the
   viewer and the editor are modal, so they cannot yet be left running in the background.
 
-[Unreleased]: https://github.com/Saixus/OpenCommander/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/Saixus/OpenCommander/releases/tag/v0.1.0
+[Unreleased]: https://github.com/Saixus/Dvopan/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/Saixus/Dvopan/releases/tag/v0.1.0

@@ -1,6 +1,6 @@
-# Open Commander
+# Dvopan
 
-Open Commander is an open source, cross-platform, [Far Manager](https://farmanager.com/) style
+Dvopan is an open source, cross-platform, [Far Manager](https://farmanager.com/) style
 dual-pane console file manager written in C# on .NET 10.
 
 Two panels, a command line, a function key bar and a clock — the layout every orthodox file manager
@@ -20,11 +20,11 @@ and behaves the same in Windows Terminal, conhost, and any terminal emulator on 
 Rendered with
 
 ```
-oc --screenshot --size 120x28 --clock 10:06 --left . --right ./src/OpenCommander/Rendering
+oc --screenshot --size 120x28 --clock 10:06 --left . --right ./src/Dvopan/Rendering
 ```
 
 ```
-╔═════════════ C:\Work\!Lab\Git\OpenCommander ═════════════╗╔═══ …it\OpenCommander\src\OpenCommander\Rendering ═10:06 AM
+╔═════════════ C:\Work\!Lab\Git\Dvopan ═════════════╗╔═══ …it\Dvopan\src\Dvopan\Rendering ═10:06 AM
 ║n           Name             │            Name            ║║n           Name             │            Name            ║
 ║..                           │                            ║║..                           │                            ║
 ║.git                         │                            ║║BoxChars.cs                  │                            ║
@@ -38,7 +38,7 @@ oc --screenshot --size 120x28 --clock 10:06 --left . --right ./src/OpenCommander
 ║CONTRIBUTING.md              │                            ║║                             │                            ║
 ║Directory.Build.props        │                            ║║                             │                            ║
 ║LICENSE                      │                            ║║                             │                            ║
-║OpenCommander.sln            │                            ║║                             │                            ║
+║Dvopan.sln            │                            ║║                             │                            ║
 ║README.md                    │                            ║║                             │                            ║
 ║                             │                            ║║                             │                            ║
 ║                             │                            ║║                             │                            ║
@@ -50,7 +50,7 @@ oc --screenshot --size 120x28 --clock 10:06 --left . --right ./src/OpenCommander
 ╟──────────────────────────────────────────────────────────╢╟──────────────────────────────────────────────────────────╢
 ║..                                     Up  08/28/26  19:21║║..                                     Up  08/30/26  21:38║
 ╚══════════ Bytes: 51.3 K, files: 8, folders: 5 ═══════════╝╚══════════ Bytes: 82.8 K, files: 8, folders: 0 ═══════════╝
-C:\Work\!Lab\Git\OpenCommander>
+C:\Work\!Lab\Git\Dvopan>
 1Help    2UserMn    3View    4Edit    5Copy    6RenMov    7MkFold    8Delete   9ConfMn   10Quit   11Plugin   12Screen
 ```
 
@@ -62,23 +62,23 @@ cyan and which blue is a question with a longer answer than you would expect; se
 
 ## Building and running
 
-Open Commander needs the [.NET 10 SDK](https://dotnet.microsoft.com/download).
+Dvopan needs the [.NET 10 SDK](https://dotnet.microsoft.com/download).
 
 ```sh
-git clone https://github.com/Saixus/OpenCommander.git
-cd opencommander
+git clone https://github.com/Saixus/Dvopan.git
+cd dvopan
 
-dotnet build OpenCommander.sln
-dotnet test  tests/OpenCommander.Tests/OpenCommander.Tests.csproj
+dotnet build Dvopan.sln
+dotnet test  tests/Dvopan.Tests/Dvopan.Tests.csproj
 
 # run it
-dotnet run --project src/OpenCommander/OpenCommander.csproj
+dotnet run --project src/Dvopan/Dvopan.csproj
 ```
 
 To produce a standalone executable named `oc`:
 
 ```sh
-dotnet publish src/OpenCommander/OpenCommander.csproj -c Release -r win-x64   # or linux-x64, osx-arm64, ...
+dotnet publish src/Dvopan/Dvopan.csproj -c Release -r win-x64   # or linux-x64, osx-arm64, ...
 ```
 
 `PublishSingleFile` switches itself on as soon as a runtime identifier is given, so the result is one
@@ -150,7 +150,7 @@ The dominant pair, as WCAG contrast ratios:
 | Palette | Panel text on panel background | Contrast |
 | --- | --- | --- |
 | Windows Terminal *Campbell* | `#61D6D6` on `#0037DA` | **4.73:1** |
-| Classic VGA — Open Commander's default | `#55FFFF` on `#0000AA` | **10.84:1** |
+| Classic VGA — Dvopan's default | `#55FFFF` on `#0000AA` | **10.84:1** |
 | Legacy Windows console — what Far Manager installs | `#00FFFF` on `#000080` | **12.77:1** |
 
 Campbell's blue is about 2.7 times as bright as the classic one (relative luminance 0.078 against
@@ -160,7 +160,7 @@ Campbell also packs blue, bright blue, cyan and bright cyan into a narrow lumina
 cyan on its blue is 2.57:1, below the 3:1 minimum for a UI element at all. "Blended" is exactly the
 right word for it.
 
-So Open Commander does not ask for a slot. Wherever the terminal can take it, each cell is written as
+So Dvopan does not ask for a slot. Wherever the terminal can take it, each cell is written as
 24-bit colour resolved through the classic VGA palette — `ESC[38;2;85;255;255;48;2;0;0;170m` instead
 of `ESC[96;44m` — and the panels then look the same whatever the terminal is themed as. Far Manager
 does the same thing by a different route: it overwrites the console's palette outright at start-up.
@@ -188,7 +188,7 @@ precisely the override you did not ask for — pass `--colors indexed`, or save 
 ```
 
 The [`NO_COLOR`](https://no-color.org/) environment variable is honoured the same way: when it is
-present and not empty, whatever its value, Open Commander stays on the 16 indexed slots and your
+present and not empty, whatever its value, Dvopan stays on the 16 indexed slots and your
 terminal's scheme decides how everything looks. It never turns the interface monochrome — a file
 manager without its colours is not a file manager.
 
@@ -403,8 +403,8 @@ Everything lives in one folder:
 
 | Platform | Folder |
 | --- | --- |
-| Windows | `%APPDATA%\OpenCommander\` |
-| Linux, macOS | `$XDG_CONFIG_HOME/OpenCommander/`, defaulting to `~/.config/OpenCommander/` |
+| Windows | `%APPDATA%\Dvopan\` |
+| Linux, macOS | `$XDG_CONFIG_HOME/Dvopan/`, defaulting to `~/.config/Dvopan/` |
 
 | File | What it is |
 | --- | --- |
@@ -443,7 +443,7 @@ tells you where to create it.
 ## Project layout
 
 ```
-src/OpenCommander/
+src/Dvopan/
   Core/         the shell: Application, UiServices, KeyBindings, MainMenu, CommandLineArgs, Settings
   Rendering/    ScreenBuffer, CellStyle, box drawing, and the diffing VT Terminal
   Input/        KeyEvent, MouseEvent and the Windows / portable input backends
@@ -457,7 +457,7 @@ src/OpenCommander/
   Shell/        running commands, the command history, path completion
   Text/         encoding detection and line ending handling
 
-tests/OpenCommander.Tests/   xunit, no mocking framework, ~1360 tests
+tests/Dvopan.Tests/   xunit, no mocking framework, ~1360 tests
 ```
 
 The dependency direction is one way: `Rendering`, `Input`, `Theming` and `Files` know nothing about
@@ -506,8 +506,8 @@ expectations, and [CHANGELOG.md](CHANGELOG.md) for what has landed so far.
 
 MIT. See [LICENSE](LICENSE).
 
-Open Commander is an independent re-implementation of the user-interface conventions Far Manager
+Dvopan is an independent re-implementation of the user-interface conventions Far Manager
 made familiar and shares no code with it. "Far Manager" is the name of that project, used here only
-to describe compatibility and inspiration; Open Commander is not affiliated with or endorsed by Far
+to describe compatibility and inspiration; Dvopan is not affiliated with or endorsed by Far
 Group. The defaults borrowed from it - colours, key bar captions, layout - are acknowledged, with
 Far Manager's BSD 3-Clause notice, in [NOTICE.md](NOTICE.md).
