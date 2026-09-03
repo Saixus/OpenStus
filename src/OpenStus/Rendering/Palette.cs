@@ -119,7 +119,7 @@ public sealed class Palette
 
     /// <summary>
     /// The classic VGA/EGA text palette - the deep navy and hard bright cyan of a DOS-era file
-    /// manager, and the default of this application.
+    /// manager. The application's own default is <see cref="Default"/>, the NT table.
     /// </summary>
     /// <remarks>
     /// The RGBI hardware rule is 0x00/0xAA per channel with a +0x55 intensity offset, plus the

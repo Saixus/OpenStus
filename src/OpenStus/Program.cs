@@ -2,6 +2,7 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using OpenStus.Core;
 using OpenStus.Rendering;
+using OpenStus.Ui;
 
 namespace OpenStus;
 
@@ -151,7 +152,49 @@ internal static class Program
     /// <returns>The application's exit code.</returns>
     private static int Interactive(CommandLineArgs args)
     {
+        WriteStartupBanner(args);
+
         using var app = Application.Create(args);
         return app.Run();
+    }
+
+    /// <summary>
+    /// Prints the startup notice on the primary screen, before <see cref="Application.Create"/>
+    /// switches to the alternate buffer, which is what makes <c>Ctrl+O</c> reveal it later:
+    /// the primary buffer is the user screen, and whatever was printed there stays underneath the
+    /// panels for the rest of the run.
+    /// </summary>
+    /// <remarks>
+    /// Skipped when the output is redirected: the terminal then comes up headless, so there is no
+    /// user screen for the notice to sit on and writing it would only corrupt whatever is reading
+    /// the stream. The forced size is checked as well, though <c>--size</c> is refused without
+    /// <c>--screenshot</c> and so cannot reach here - it costs nothing and keeps this correct if
+    /// that ever stops being true.
+    /// </remarks>
+    /// <param name="args">The parsed command line.</param>
+    private static void WriteStartupBanner(CommandLineArgs args)
+    {
+        if (args.EffectiveWidth is not null || args.EffectiveHeight is not null)
+        {
+            return;
+        }
+
+        try
+        {
+            if (Console.IsOutputRedirected)
+            {
+                return;
+            }
+
+            if (StartupBanner.Render(Console.WindowWidth) is string banner)
+            {
+                Console.Out.Write(banner);
+            }
+        }
+        catch
+        {
+            // No console attached, or the tty went away: nowhere to greet anyone, and a greeting
+            // is never worth failing a start over.
+        }
     }
 }

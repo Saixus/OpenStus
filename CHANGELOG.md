@@ -8,6 +8,14 @@ All notable changes to Open Stus are recorded here. The format follows
 
 ### Added
 
+- **A startup notice on the user screen.** Before the panels come up, the program prints a text
+  portrait of Vasyl Stus beside the version, the licence and the credit for the photograph, so
+  `Ctrl+O` reveals it underneath the panels the way it reveals command output. It is drawn in
+  printable ASCII only, laid out for an 80 column terminal, dropped to the text alone when the
+  terminal is narrower and skipped entirely when the output is redirected or a size was forced.
+  The portrait is derived from his 1980 arrest photograph, which is in the public domain and came
+  from Wikimedia Commons.
+
 - **Tabs in the panels.** `Ctrl+T` opens a new tab on the current folder, `Ctrl+W` closes it,
   `Ctrl+Tab` / `Ctrl+Shift+Tab` (or `Ctrl+Alt+Right` / `Ctrl+Alt+Left`, for terminals that keep
   Ctrl+Tab for themselves) move between them, and a click on a caption switches. Each tab keeps its
