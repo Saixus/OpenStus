@@ -31,7 +31,8 @@ public class StartupBannerTests
         string banner = StartupBanner.Render(120)!;
 
         Assert.Contains(StartupBanner.Portrait[0].TrimEnd(), banner, StringComparison.Ordinal);
-        Assert.Contains("Vasyl Stus (1938-1985)", banner, StringComparison.Ordinal);
+        Assert.Contains("Vasyl Stus", banner, StringComparison.Ordinal);
+        Assert.Contains("(1938-1985)", banner, StringComparison.Ordinal);
         Assert.Contains("Open Stus", banner, StringComparison.Ordinal);
 
         // The first portrait row and the first notice line share one line of output.
@@ -55,7 +56,8 @@ public class StartupBannerTests
     {
         string banner = StartupBanner.Render(StartupBanner.NoticeWidth + 1)!;
 
-        Assert.Contains("Vasyl Stus (1938-1985)", banner, StringComparison.Ordinal);
+        Assert.Contains("Vasyl Stus", banner, StringComparison.Ordinal);
+        Assert.Contains("(1938-1985)", banner, StringComparison.Ordinal);
         Assert.DoesNotContain("@@@", banner, StringComparison.Ordinal);
         Assert.All(
             Lines(banner),
@@ -114,7 +116,11 @@ public class StartupBannerTests
     public void TheBannerIsShortEnoughForTheSmallestUsualTerminal()
     {
         // A 25 row terminal has to keep the whole notice and still show the prompt Ctrl+O draws
-        // on its bottom row.
-        Assert.True(Lines(StartupBanner.Render(120)!).Length <= 24);
+        // on its bottom row. The banner ends with a line break, so the split leaves one empty
+        // trailing element that costs no row.
+        string banner = StartupBanner.Render(120)!;
+
+        Assert.EndsWith(Environment.NewLine, banner, StringComparison.Ordinal);
+        Assert.True(Lines(banner).Length - 1 <= 24, $"the banner is {Lines(banner).Length - 1} rows tall");
     }
 }

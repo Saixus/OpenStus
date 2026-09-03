@@ -20,52 +20,66 @@ public static class StartupBanner
     public const int Gutter = 2;
 
     /// <summary>
-    /// The portrait, one string per row, in the density ramp a light-on-dark terminal needs: a
-    /// denser glyph is a darker part of the photograph, so the subject is drawn and the pale wall
-    /// behind him falls away into unlit background.
+    /// The portrait, one string per row, drawn in a sixteen step density ramp where a denser glyph
+    /// is a <em>lighter</em> part of the photograph.
     /// </summary>
+    /// <remarks>
+    /// That way round on purpose. On a light-on-dark terminal, glyph density reads as brightness,
+    /// so mapping density to darkness would print a photographic negative - and a face in negative
+    /// is markedly harder to recognise, which is exactly what the first attempt at this looked
+    /// like. Keeping the tones true costs a bright block where the wall behind him is, and buys a
+    /// face.
+    /// </remarks>
     public static IReadOnlyList<string> Portrait { get; } =
     [
-        "         =#%@@@@@@@@@@@@@#*-",
-        "      -*%@@@@@@@@@@@@@@@@@@@%+",
-        "    -#@@@@@@@@@@@@@@%%%%@@@@@@#",
-        "   -%@@@@@@@@@@%**++++++*#@@@@@-",
-        "  -%@@@@@@@%#+=-=====++++*#@@@@*",
-        "  -@@@@%#*==--=======+*####%@@@%",
-        "   *@@@+==++=======+*######*#%%#=-",
-        "    *@%=+####%#*==+*#**#**+++#*==+",
-        "    =*%+==+*##*+===+++=======+*++=",
-        "   -=-*+-==-------=++==----===++=",
-        "    -==+=----  ---=+++=--======-",
-        "      --=----  -+==**+=---====",
-        "        -=----=========+======",
-        "         -----==============+=",
-        "          =====----==--=+++++-",
-        "         *+++**+=----==+***++*-",
-        "    -- =#%#+==+**+******++++*%+",
-        "=*#%%%#%%%%%*+=--=======++*####***+-",
+        "xxx#####%88#*;~-,------------~=+%@8%%#xxxxxx",
+        "#x#####%#=~.,,,,,----,,,,,,,,,,,.-=#%##xxx++",
+        "xxxx##x:...,,,,,,,,,,,,,,,,,,,,,....~x#xxxxx",
+        "xxx##=,.,,,,-,,,,,,,...,-~~~~-,,,,,. :%#xxxx",
+        "###%=..,,,,,,,,,..,~;=!!!**!!!=~,,-,.-%#xxxx",
+        "x##;.,,,,,,,,,,-:!+++++++**!!!!=~,,,,.+%#xxx",
+        "##* .,,,,,.,-;*++++***!!!!!!!!!=:,,,,.=%#xxx",
+        "x#+ .,,,~:=+xx++**!***!***!=:::;;~,-,,-####x",
+        "###:.-,-!+++++xxxx++*++*!:~-~~~~:=~~,,~++###",
+        "##%%:-,-+*=:~~:~:;;**+=:~;=;:;;==!=~-;*+;+%%",
+        "###%+~--*!::;=;~~~=!**==:~!::!==!**!~*++=!%#",
+        "####*=:-*+*!;=;~;=!**+*!!=!++++*****!==!=x##",
+        "###+!+*:!++**++x+++*++!!***++++++***!!=!+###",
+        "xxxx!++=!+*+++xxxx+*+*!=!!*++*******!***%###",
+        "xx##x***;**+++xxxx+*x+*=;!=!+++*!**!!*+#####",
+        "######+++**+++xx#x+!!*!====*+++******%%#####",
+        "#######x++****+++**********!!********%######",
+        "##########+*++++*!=!!!!!!!!!=!+****!*%%%%###",
+        "#########%#*+x+++**+++***********!!=+%######",
+        "#########%8+*****+xx++***++x*!!==!=*%%#xxxx#",
+        "###%%####%x===!!==!+++x++++**=;;;=!!+xxxxx##",
+        "#########!--!*=;;=;=!****!!=;;;=!!!:,+####%%",
     ];
 
     /// <summary>The lines printed beside the portrait.</summary>
     public static IReadOnlyList<string> Notice { get; } =
     [
         CommandLineArgs.VersionText,
-        "An open source dual-pane file manager.",
+        "An open source dual-pane",
+        "console file manager.",
         string.Empty,
-        "Named after Vasyl Stus (1938-1985),",
-        "Ukrainian poet, translator and",
-        "dissident. The Soviet regime banned his",
-        "work; arrested in 1972 and again in",
-        "1980, he spent thirteen years in camps",
-        "and exile and died in the Perm-36 camp",
-        "for political prisoners. Reburied in",
-        "Kyiv in 1989; Hero of Ukraine in 2005.",
+        "Named after Vasyl Stus",
+        "(1938-1985), Ukrainian poet,",
+        "translator and dissident. The",
+        "Soviet regime banned his work;",
+        "arrested in 1972 and again in",
+        "1980, he spent thirteen years",
+        "in camps and exile and died in",
+        "the Perm-36 camp for political",
+        "prisoners. Reburied in Kyiv in",
+        "1989; Hero of Ukraine in 2005.",
         string.Empty,
         "Portrait from his 1980 arrest",
         "photograph; public domain, via",
         "Wikimedia Commons.",
         string.Empty,
-        "Copyright (c) 2026 Dmytro Soyenko, MIT.",
+        "Copyright (c) 2026",
+        "Dmytro Soyenko, MIT.",
         "github.com/Saixus/OpenStus",
     ];
 
