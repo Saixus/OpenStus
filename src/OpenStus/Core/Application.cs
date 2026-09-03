@@ -114,7 +114,8 @@ public sealed class Application : IAppContext, IDisposable
             args.EffectiveWidth,
             args.EffectiveHeight,
             ResolveColorDepth(args, settings),
-            ResolvePalette(args, settings));
+            ResolvePalette(args, settings),
+            StartupBanner.Render);
 
         Theme theme = Theme.LoadOrDefault(args.ThemePath ?? settings.ThemePath);
 

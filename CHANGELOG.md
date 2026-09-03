@@ -10,9 +10,10 @@ All notable changes to Open Stus are recorded here. The format follows
 
 - **A startup notice on the user screen.** Before the panels come up, the program prints a text
   portrait of Vasyl Stus beside the version, the licence and the credit for the photograph, so
-  `Ctrl+O` reveals it underneath the panels the way it reveals command output. It is drawn in
-  printable ASCII only, laid out for an 80 column terminal, dropped to the text alone when the
-  terminal is narrower and skipped entirely when the output is redirected or a size was forced.
+  `Ctrl+O` reveals it underneath the panels the way it reveals command output. The portrait is
+  drawn in the block shades, which fill a whole cell and so survive any terminal font; the notice
+  beside it is ASCII. It is laid out for an 80 column terminal, dropped to the text alone when the
+  terminal is narrower and skipped entirely when the terminal comes up headless.
   The portrait is derived from his 1980 arrest photograph, which is in the public domain and came
   from Wikimedia Commons.
 

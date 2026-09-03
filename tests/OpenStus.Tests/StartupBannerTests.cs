@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using OpenStus.Rendering;
 using OpenStus.Ui;
 using Xunit;
 
@@ -14,15 +15,17 @@ public class StartupBannerTests
         banner.Split(Environment.NewLine, StringSplitOptions.None);
 
     [Fact]
-    public void EveryGlyphIsPrintableAscii()
+    public void TheNoticeIsPrintableAsciiAndThePortraitIsOnlyBlockShades()
     {
-        // The banner is written before the console is switched to UTF-8, so a host still on a
-        // legacy code page would turn anything outside this range into question marks.
-        string banner = StartupBanner.Render(120)!;
+        // The portrait is allowed the block shades and nothing else: they are what survive whatever
+        // font the terminal uses. The notice has no reason to leave ASCII at all.
+        Assert.All(
+            StartupBanner.Notice.SelectMany(static line => line),
+            c => Assert.InRange(c, ' ', '~'));
 
         Assert.All(
-            banner.Where(c => c is not ('\r' or '\n')),
-            c => Assert.InRange(c, ' ', '~'));
+            StartupBanner.Portrait.SelectMany(static line => line),
+            c => Assert.Contains(c, " ░▒▓█"));
     }
 
     [Fact]
@@ -58,7 +61,7 @@ public class StartupBannerTests
 
         Assert.Contains("Vasyl Stus", banner, StringComparison.Ordinal);
         Assert.Contains("(1938-1985)", banner, StringComparison.Ordinal);
-        Assert.DoesNotContain("@@@", banner, StringComparison.Ordinal);
+        Assert.DoesNotContain("▓", banner, StringComparison.Ordinal);
         Assert.All(
             Lines(banner),
             line => Assert.True(line.Length <= StartupBanner.NoticeWidth, $"'{line}' is too wide"));
@@ -110,6 +113,23 @@ public class StartupBannerTests
         Assert.Contains("Wikimedia Commons", banner, StringComparison.Ordinal);
         Assert.Contains("Dmytro Soyenko", banner, StringComparison.Ordinal);
         Assert.Contains("MIT", banner, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AHeadlessTerminalIsNeverGreeted()
+    {
+        // --screenshot runs headless, and a banner on its stdout would corrupt the one frame it
+        // exists to emit. Terminal.Create must not even ask for the text.
+        bool asked = false;
+
+        using var terminal = Terminal.Create(80, 25, banner: _ =>
+        {
+            asked = true;
+            return "should never be printed";
+        });
+
+        Assert.True(terminal.IsHeadless);
+        Assert.False(asked);
     }
 
     [Fact]

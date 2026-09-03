@@ -10,9 +10,9 @@ namespace OpenStus.Ui;
 /// </summary>
 /// <remarks>
 /// It goes to the primary buffer before the alternate screen is entered, so it costs no room on
-/// the panels screen and survives underneath it exactly the way command output does. Every glyph
-/// is printable ASCII: the banner is written before the console has been switched to UTF-8, so on
-/// a host still sitting on a legacy code page anything else would land as question marks.
+/// the panels screen and survives underneath it exactly the way command output does. The terminal
+/// writes it once the console has been switched to UTF-8, which is what lets the portrait use the
+/// block shades; the notice beside it stays ASCII, having no reason not to.
 /// </remarks>
 public static class StartupBanner
 {
@@ -20,40 +20,50 @@ public static class StartupBanner
     public const int Gutter = 2;
 
     /// <summary>
-    /// The portrait, one string per row, drawn in a sixteen step density ramp where a denser glyph
-    /// is a <em>lighter</em> part of the photograph.
+    /// The portrait, one string per row, in the five block shades from blank through
+    /// <c>U+2591</c>..<c>U+2593</c> to <c>U+2588</c>, where a denser shade is a <em>lighter</em>
+    /// part of the photograph.
     /// </summary>
     /// <remarks>
-    /// That way round on purpose. On a light-on-dark terminal, glyph density reads as brightness,
-    /// so mapping density to darkness would print a photographic negative - and a face in negative
-    /// is markedly harder to recognise, which is exactly what the first attempt at this looked
-    /// like. Keeping the tones true costs a bright block where the wall behind him is, and buys a
-    /// face.
+    /// <para>
+    /// Blocks rather than the punctuation an ASCII portrait would use, because punctuation fills
+    /// only part of its cell and a different part for every glyph - a comma sits on the baseline, a
+    /// tilde floats at mid height - so with the leading a terminal puts between rows the picture
+    /// bands into stripes instead of reading as tone. A block fills its whole cell, which makes the
+    /// result independent of the font's weight and spacing. Five even shades beat sixteen uneven
+    /// ones; dithering to fake more was tried and only added a visible checkerboard at this size.
+    /// </para>
+    /// <para>
+    /// Density tracks lightness, not darkness, on purpose. On a light-on-dark terminal density
+    /// reads as brightness, so the other way round prints a photographic negative - and a face in
+    /// negative is markedly harder to recognise, which is exactly what the first attempt looked
+    /// like. Keeping the tones true costs a lit block where the wall behind him is, and buys a face.
+    /// </para>
     /// </remarks>
     public static IReadOnlyList<string> Portrait { get; } =
     [
-        "xxx#####%88#*;~-,------------~=+%@8%%#xxxxxx",
-        "#x#####%#=~.,,,,,----,,,,,,,,,,,.-=#%##xxx++",
-        "xxxx##x:...,,,,,,,,,,,,,,,,,,,,,....~x#xxxxx",
-        "xxx##=,.,,,,-,,,,,,,...,-~~~~-,,,,,. :%#xxxx",
-        "###%=..,,,,,,,,,..,~;=!!!**!!!=~,,-,.-%#xxxx",
-        "x##;.,,,,,,,,,,-:!+++++++**!!!!=~,,,,.+%#xxx",
-        "##* .,,,,,.,-;*++++***!!!!!!!!!=:,,,,.=%#xxx",
-        "x#+ .,,,~:=+xx++**!***!***!=:::;;~,-,,-####x",
-        "###:.-,-!+++++xxxx++*++*!:~-~~~~:=~~,,~++###",
-        "##%%:-,-+*=:~~:~:;;**+=:~;=;:;;==!=~-;*+;+%%",
-        "###%+~--*!::;=;~~~=!**==:~!::!==!**!~*++=!%#",
-        "####*=:-*+*!;=;~;=!**+*!!=!++++*****!==!=x##",
-        "###+!+*:!++**++x+++*++!!***++++++***!!=!+###",
-        "xxxx!++=!+*+++xxxx+*+*!=!!*++*******!***%###",
-        "xx##x***;**+++xxxx+*x+*=;!=!+++*!**!!*+#####",
-        "######+++**+++xx#x+!!*!====*+++******%%#####",
-        "#######x++****+++**********!!********%######",
-        "##########+*++++*!=!!!!!!!!!=!+****!*%%%%###",
-        "#########%#*+x+++**+++***********!!=+%######",
-        "#########%8+*****+xx++***++x*!!==!=*%%#xxxx#",
-        "###%%####%x===!!==!+++x++++**=;;;=!!+xxxxx##",
-        "#########!--!*=;;=;=!****!!=;;;=!!!:,+####%%",
+        "▓▓▓▓▓▓▓████▓▒▒░░░░░░░░░    ░░░▒▓▓████▓▓▓▓▓▓▓",
+        "▓▓▓▓▓▓██▓▒░     ░░               ░▒▓█▓▓▓▓▓▓▓",
+        "▓▓▓▓▓▓▓░                            ░▓▓▓▓▓▓▓",
+        "▓▓▓▓▓▒                 ░░░░░░░       ░▓▓▓▓▓▓",
+        "▓▓▓▓▒              ░▒▒▒▒▒▒▒▒▒▒▒░     ░▓▓▓▓▓▓",
+        "▓▓▓▒           ░░▒▓▓▓▓▓▓▓▓▒▒▒▒▒▒░     ▓▓▓▓▓▓",
+        "▓▓▓         ░▒▒▓▓▓▓▓▓▒▒▒▒▒▒▒▒▒▒▒░     ▒█▓▓▓▓",
+        "▓▓▓     ░░▒▓▓▓▓▓▓▓▒▒▒▒▒▒▒▒▒▒░░░▒▒░░░  ░▓▓▓▓▓",
+        "▓▓▓░   ░▒▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒░░░░░░░░▒░░ ░░▓▓▓▓▓",
+        "▓▓█▓░░ ░▓▓▒░░░░░░▒▒▒▒▓▒░░░▒▒░▒▒▒▒▒▒░░▒▒▓▒▓██",
+        "▓▓██▓░░░▓▒░░▒▒▒░░░▒▒▓▓▒▒░░▒░░▒▒▒▒▒▒▒░▒▓▓▒▒██",
+        "▓▓█▓▓▒░░▒▓▓▒░▒░░░▒▒▒▓▓▒▒▒▒▒▓▓▓▓▓▓▓▒▓▒▒▒▒▒▓█▓",
+        "▓▓▓▓▒▓▒░▒▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒▓▓▓▓▓▓▓▓▒▓▒▒▒▒▓█▓▓",
+        "▓▓▓▓▒▓▓▒▒▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒▒▓▓▓▓▓▓▓▒▒▒▒▒▓████",
+        "▓▓▓▓▓▓▒▒▒▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒▒▓▓▓▓▒▒▒▒▒▒▓▓█▓▓▓",
+        "▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒▒▒▒▒▒▓▓▓▓▓▒▒▒▒████▓▓▓",
+        "▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▓▓▓▓▒▒▒▒▒▒▓▓▓▓▓▒▒███▓▓▓▓",
+        "▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒▒▒▒▒▒▒▒▒▒▓▓▒▒▒▒▓██████▓",
+        "▓▓▓▓▓▓▓▓██▓▓▓▓▓▓▓▒▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒▒▓██▓▓▓▓▓",
+        "▓▓▓▓█▓▓████▓▒▒▓▒▒▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒▒▒▒▒▓██▓▓▓▓▓",
+        "▓▓████▓███▓▒▒▒▒▒▒▒▒▓▓▓▓▓▓▓▓▓▒▒▒▒▒▒▒▒▓▓▓▓▓▓▓▓",
+        "▓▓▓▓▓▓▓▓▓▒░░▒▒▒▒▒▒▒▒▒▓▓▒▒▒▒▒▒▒▒▒▒▒▒░░▓▓▓▓▓██",
     ];
 
     /// <summary>The lines printed beside the portrait.</summary>

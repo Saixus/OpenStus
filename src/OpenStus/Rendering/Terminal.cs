@@ -155,7 +155,8 @@ public sealed class Terminal : IDisposable
         int? forcedWidth = null,
         int? forcedHeight = null,
         ColorDepth? forcedDepth = null,
-        Palette? palette = null)
+        Palette? palette = null,
+        Func<int, string?>? banner = null)
     {
         bool forcedSize = forcedWidth.HasValue || forcedHeight.HasValue;
         bool redirected = SafeIsOutputRedirected();
@@ -198,6 +199,13 @@ public sealed class Terminal : IDisposable
         if (!headless)
         {
             terminal.TrySetUtf8OutputEncoding();
+
+            // Written here, between the console going UTF-8 and the alternate screen opening, so
+            // that it can use non-ASCII and lands on the primary buffer - the user screen Ctrl+O
+            // reveals. A headless terminal has no such screen and is skipped entirely, which is
+            // what keeps --screenshot output clean.
+            terminal.WritePrimaryScreen(banner?.Invoke(width));
+
             terminal.EnterAlternateScreen();
             terminal.InstallExitHooks();
         }
@@ -653,6 +661,21 @@ public sealed class Terminal : IDisposable
         {
             _live = null;
         }
+    }
+
+    /// <summary>
+    /// Writes text straight to the primary screen while it is still showing, before the alternate
+    /// buffer is entered. Whatever is written stays underneath the panels for the rest of the run.
+    /// </summary>
+    private void WritePrimaryScreen(string? text)
+    {
+        if (_writer is null || _altScreen || string.IsNullOrEmpty(text))
+        {
+            return;
+        }
+
+        _writer.Write(text);
+        _writer.Flush();
     }
 
     private void EnterAlternateScreen()
