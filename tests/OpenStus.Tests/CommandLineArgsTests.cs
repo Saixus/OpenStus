@@ -620,7 +620,7 @@ public class PaletteOptionTests
     }
 
     [Fact]
-    public void NothingConfiguredMeansTheTableFarInstalls() =>
+    public void NothingConfiguredMeansTheWindowsNtTable() =>
         Assert.Same(Palette.WindowsNt, Application.ResolvePalette(new CommandLineArgs(), new Settings()));
 
     [Theory]

@@ -448,7 +448,7 @@ public class BoxDrawingTests
     }
 
     [Fact]
-    public void ScrollBarGlyphsAreTheFarOnes()
+    public void ScrollBarGlyphsAreTheClassicShades()
     {
         Assert.Equal('\u2591', BoxChars.ScrollBarTrack);
         Assert.Equal('\u2588', BoxChars.ScrollBarThumb);

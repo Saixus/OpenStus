@@ -86,7 +86,7 @@ public class InputTests
     [InlineData(ConsoleKey.NumPad5, KeyMods.None, "Num5")]
     [InlineData(ConsoleKey.Oem5, KeyMods.Ctrl, "Ctrl+\\")]
     [InlineData(ConsoleKey.F12, KeyMods.Ctrl, "Ctrl+F12")]
-    public void ToDisplayString_UsesFarNotation(ConsoleKey key, KeyMods mods, string expected)
+    public void ToDisplayString_UsesTheClassicNotation(ConsoleKey key, KeyMods mods, string expected)
     {
         Assert.Equal(expected, new KeyEvent(key, '\0', mods).ToDisplayString());
     }

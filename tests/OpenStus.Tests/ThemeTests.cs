@@ -209,7 +209,7 @@ public class ThemeDefaultsTests
     }
 
     [Fact]
-    public void ANewThemeAlreadyCarriesTheFarPalette()
+    public void ANewThemeAlreadyCarriesTheClassicPalette()
     {
         var t = new Theme();
         Assert.Equal("Classic", t.Name);

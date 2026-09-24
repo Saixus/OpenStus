@@ -159,7 +159,7 @@ public class FileMaskListTests
     }
 
     [Fact]
-    public void FarStyleExcludesFollowAPipe()
+    public void ClassicStyleExcludesFollowAPipe()
     {
         Assert.True(FileMask.IsMatchAny("Program.cs", "*.cs|*.g.cs", ignoreCase: true));
         Assert.False(FileMask.IsMatchAny("Model.g.cs", "*.cs|*.g.cs", ignoreCase: true));
