@@ -97,7 +97,7 @@ public class TextBufferContentTests
     }
 
     [Fact]
-    public void TheDefaultTabStopIsEightMatchingFarAndTheViewer()
+    public void TheDefaultTabStopIsEightMatchingTheClassicConsoleAndTheViewer()
     {
         Assert.Equal(8, TextBuffer.DefaultTabSize);
         Assert.Equal(8, new TextBuffer().TabSize);

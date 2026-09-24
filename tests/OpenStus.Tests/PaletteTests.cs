@@ -86,7 +86,7 @@ public class PaletteTests
         Assert.Equal(hex, Palette.ClassicVga[slot].ToHex());
 
     [Fact]
-    public void TheFarPanelPairIsDeepNavyAndBrightCyan()
+    public void TheClassicPanelPairIsDeepNavyAndBrightCyan()
     {
         // The two colours that cover most of the screen; this is the crispness the fix is about.
         Assert.Equal("#0000AA", Palette.ClassicVga[ConsoleColor.DarkBlue].ToHex());
