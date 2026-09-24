@@ -38,6 +38,13 @@ namespace OpenStus.Ui;
 /// truncated from the left when the current directory is too long, so the tail of the path - the
 /// part that actually tells you where you are - survives.
 /// </para>
+/// <para>
+/// Text can be selected, but only while the panels are hidden (Ctrl+O): there is no panel then to
+/// claim Shift and the arrows, so the shell passes <c>selectWithShift</c> and Shift+Left, Shift+Right,
+/// Shift+Home, Shift+End and their Ctrl+Shift word forms extend a selection, as in any edit field.
+/// A selection is copied with Ctrl+C or Ctrl+Ins, cut with Shift+Del, removed by Backspace or Del,
+/// and replaced by whatever is typed or pasted over it.
+/// </para>
 /// </remarks>
 public sealed class CommandLine
 {
@@ -54,6 +61,9 @@ public sealed class CommandLine
     private int _caret;
     private int _scroll;
     private string? _pendingLine;
+
+    // The fixed end of the selection, or -1 for none; the caret is the moving end.
+    private int _anchor = -1;
 
     // Reverse search (Ctrl+R): the query typed so far, the history index of the current match or
     // -1, and the line as it was before the search began, so Escape can put it back.
@@ -111,6 +121,7 @@ public sealed class CommandLine
         _searchOriginal = _text;
         _searchQuery = _text;
         _searchIndex = -1;
+        _anchor = -1;
         History.ResetCursor();
         _pendingLine = null;
 
@@ -141,6 +152,7 @@ public sealed class CommandLine
         {
             _text = value ?? string.Empty;
             _caret = _text.Length;
+            _anchor = -1;
             History.ResetCursor();
             _pendingLine = null;
         }
@@ -148,6 +160,23 @@ public sealed class CommandLine
 
     /// <summary>The caret position, from 0 to the length of <see cref="Text"/>.</summary>
     public int Caret => _caret;
+
+    /// <summary><see langword="true"/> while part of the line is selected.</summary>
+    public bool HasSelection => _anchor >= 0 && _anchor <= _text.Length && _anchor != _caret;
+
+    /// <summary>The selected text; empty when nothing is selected.</summary>
+    public string SelectedText
+    {
+        get
+        {
+            (int start, int end) = SelectionRange;
+            return _text[start..end];
+        }
+    }
+
+    /// <summary>The selection as <c>[Start, End)</c>; an empty range at the caret when there is none.</summary>
+    public (int Start, int End) SelectionRange =>
+        HasSelection ? (Math.Min(_anchor, _caret), Math.Max(_anchor, _caret)) : (_caret, _caret);
 
     /// <summary><see langword="true"/> when there is nothing on the line.</summary>
     public bool IsEmpty => _text.Length == 0;
@@ -200,9 +229,27 @@ public sealed class CommandLine
         DrawColouring(buf, y, promptWidth, textWidth);
         DrawSuggestion(buf, y, promptWidth, textWidth);
         DrawSearchMatch(buf, y, promptWidth, textWidth);
+        DrawSelection(buf, y, promptWidth, textWidth);
 
         CaretY = y;
         CaretX = Math.Clamp(promptWidth + (_caret - _scroll), 0, Math.Max(0, width - 1));
+    }
+
+    /// <summary>Paints the selected part of the visible text over its colouring.</summary>
+    private void DrawSelection(ScreenBuffer buf, int y, int promptWidth, int textWidth)
+    {
+        if (!HasSelection)
+        {
+            return;
+        }
+
+        (int start, int end) = SelectionRange;
+        int x0 = Math.Max(0, start - _scroll);
+        int x1 = Math.Min(textWidth, end - _scroll);
+        if (x1 > x0)
+        {
+            buf.FillStyle(new Rect(promptWidth + x0, y, x1 - x0, 1), _theme.CommandLineSelected);
+        }
     }
 
     /// <summary>Highlights where the reverse-search query sits inside the matched command.</summary>
@@ -295,7 +342,7 @@ public sealed class CommandLine
 
     /// <summary>
     /// Inserts text at the caret, which is where Ctrl+Enter, Ctrl+F and the other "put the file name
-    /// on the command line" bindings land.
+    /// on the command line" bindings land. A selection is replaced by it.
     /// </summary>
     /// <param name="text">The text to insert; <see langword="null"/> or empty does nothing.</param>
     public void Insert(string? text)
@@ -305,6 +352,7 @@ public sealed class CommandLine
             return;
         }
 
+        DeleteSelection();
         _text = _text.Insert(_caret, text);
         _caret += text.Length;
         History.ResetCursor();
@@ -317,8 +365,100 @@ public sealed class CommandLine
         _text = string.Empty;
         _caret = 0;
         _scroll = 0;
+        _anchor = -1;
         History.ResetCursor();
         _pendingLine = null;
+    }
+
+    /// <summary>
+    /// The keys that make and use a selection. Shift+motion only extends it when
+    /// <paramref name="selectWithShift"/> says the panels have let go of those keys; copying works
+    /// whenever there is something selected.
+    /// </summary>
+    private bool HandleSelectionKey(KeyEvent key, bool selectWithShift)
+    {
+        bool shift = (key.Mods & KeyMods.Shift) != 0;
+        bool ctrl = (key.Mods & KeyMods.Ctrl) != 0;
+        bool alt = (key.Mods & KeyMods.Alt) != 0;
+
+        if (alt)
+        {
+            return false;
+        }
+
+        if (selectWithShift && shift)
+        {
+            switch (key.Key)
+            {
+                case ConsoleKey.LeftArrow:
+                    ExtendSelection(ctrl ? PreviousWord(_caret) : _caret - 1);
+                    return true;
+
+                case ConsoleKey.RightArrow:
+                    ExtendSelection(ctrl ? NextWord(_caret) : _caret + 1);
+                    return true;
+
+                case ConsoleKey.Home when !ctrl:
+                    ExtendSelection(0);
+                    return true;
+
+                case ConsoleKey.End when !ctrl:
+                    ExtendSelection(_text.Length);
+                    return true;
+            }
+        }
+
+        if (selectWithShift && key.Mods == KeyMods.Ctrl && key.Key == ConsoleKey.A && !IsEmpty)
+        {
+            _anchor = 0;
+            _caret = _text.Length;
+            return true;
+        }
+
+        if (HasSelection && key.Mods == KeyMods.Ctrl && key.Key is ConsoleKey.C or ConsoleKey.Insert)
+        {
+            Clipboard.SetText(SelectedText);
+            return true;
+        }
+
+        if (HasSelection && key.Mods == KeyMods.Shift && key.Key == ConsoleKey.Delete)
+        {
+            Clipboard.SetText(SelectedText);
+            DeleteSelection();
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>Moves the caret and keeps the anchor where the selection started.</summary>
+    private void ExtendSelection(int position)
+    {
+        if (_anchor < 0 || _anchor > _text.Length)
+        {
+            _anchor = _caret;
+        }
+
+        _caret = Math.Clamp(position, 0, _text.Length);
+        History.ResetCursor();
+        _pendingLine = null;
+    }
+
+    /// <summary>Removes the selected text and leaves the caret where it began.</summary>
+    /// <returns><see langword="true"/> when there was a selection to remove.</returns>
+    private bool DeleteSelection()
+    {
+        if (!HasSelection)
+        {
+            _anchor = -1;
+            return false;
+        }
+
+        (int start, int end) = SelectionRange;
+        _text = _text.Remove(start, end - start);
+        _anchor = -1;
+        MoveCaret(start);
+        return true;
     }
 
     /// <summary>
@@ -326,13 +466,22 @@ public sealed class CommandLine
     /// </summary>
     /// <param name="key">The key press.</param>
     /// <param name="ctx">The application context, used to run the command on Enter.</param>
+    /// <param name="selectWithShift">
+    /// Whether Shift plus a motion key selects text. The shell sets it while the panels are hidden
+    /// (Ctrl+O); otherwise those chords are the panel's select-and-move family and go back to it.
+    /// </param>
     /// <returns>
     /// <see langword="true"/> when the command line consumed the key, <see langword="false"/> when
     /// the panel should get it instead.
     /// </returns>
-    public bool HandleKey(KeyEvent key, IAppContext ctx)
+    public bool HandleKey(KeyEvent key, IAppContext ctx, bool selectWithShift = false)
     {
         if (_searching && HandleSearchKey(key))
+        {
+            return true;
+        }
+
+        if (HandleSelectionKey(key, selectWithShift))
         {
             return true;
         }
@@ -381,11 +530,19 @@ public sealed class CommandLine
                     return true;
 
                 case ConsoleKey.Backspace when !empty:
-                    DeleteRange(PreviousWord(_caret), _caret);
+                    if (!DeleteSelection())
+                    {
+                        DeleteRange(PreviousWord(_caret), _caret);
+                    }
+
                     return true;
 
                 case ConsoleKey.Delete when !empty:
-                    DeleteRange(_caret, NextWord(_caret));
+                    if (!DeleteSelection())
+                    {
+                        DeleteRange(_caret, NextWord(_caret));
+                    }
+
                     return true;
 
                 default:
@@ -427,6 +584,11 @@ public sealed class CommandLine
                 return CompletePath(ctx);
 
             case ConsoleKey.Backspace:
+                if (DeleteSelection())
+                {
+                    return true;
+                }
+
                 if (empty || _caret == 0)
                 {
                     return !empty;
@@ -440,6 +602,11 @@ public sealed class CommandLine
                 if (empty)
                 {
                     return false;
+                }
+
+                if (DeleteSelection())
+                {
+                    return true;
                 }
 
                 if (_caret < _text.Length)
@@ -680,6 +847,7 @@ public sealed class CommandLine
 
         _text = suggestion[..end];
         _caret = _text.Length;
+        _anchor = -1;
         History.ResetCursor();
         _pendingLine = null;
     }
@@ -777,6 +945,7 @@ public sealed class CommandLine
     {
         _text = string.Concat(_text.AsSpan(0, start), replacement, _text.AsSpan(start + length));
         _caret = start + replacement.Length;
+        _anchor = -1;
         History.ResetCursor();
         _pendingLine = null;
     }
@@ -839,11 +1008,13 @@ public sealed class CommandLine
     {
         _text = entry;
         _caret = entry.Length;
+        _anchor = -1;
     }
 
     private void MoveCaret(int position)
     {
         _caret = Math.Clamp(position, 0, _text.Length);
+        _anchor = -1;
         AfterEdit();
     }
 

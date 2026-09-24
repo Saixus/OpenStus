@@ -97,6 +97,13 @@ public enum SyntaxFamily : byte
 
     /// <summary>The CSV scanner: a white header row, then columns cycling through the colours.</summary>
     Csv,
+
+    /// <summary>
+    /// The plain-text scanner for files no language claims: numbers, quoted strings, URLs, comment
+    /// lines, <c>[section]</c> headers and a few well-known words - whatever makes a log or a config
+    /// file readable without knowing its grammar.
+    /// </summary>
+    PlainText,
 }
 
 /// <summary>

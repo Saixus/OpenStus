@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using OpenStus.Archives;
 using OpenStus.Editor;
 using OpenStus.Files;
 using OpenStus.Input;
@@ -510,7 +511,7 @@ public sealed class Application : IAppContext, IDisposable
                     return;
 
                 case FileEditor editor:
-                    Terminal.SetCursor(editor.CursorScreenX, editor.CursorScreenY, true);
+                    Terminal.SetCursor(editor.CursorScreenX, editor.CursorScreenY, editor.CursorVisible, editor.CursorShape);
                     return;
 
                 default:
@@ -837,7 +838,8 @@ public sealed class Application : IAppContext, IDisposable
 
             if (CommandLineRow >= 0)
             {
-                if (_commandLine.HandleKey(key, this))
+                // No panel is there to claim Shift and the arrows, so they select text.
+                if (_commandLine.HandleKey(key, this, selectWithShift: true))
                 {
                     return;
                 }
@@ -1021,7 +1023,7 @@ public sealed class Application : IAppContext, IDisposable
 
         int code = CommandExecutor.Run(
             command,
-            ActiveFilePanel.CurrentPath,
+            ActiveFilePanel.WorkingDirectory,
             Terminal,
             out string? changeDirectory,
             resumeAltScreen: !stayOnUserScreen,
@@ -1123,19 +1125,43 @@ public sealed class Application : IAppContext, IDisposable
             return;
         }
 
-        // TryOpen has already shown its own detailed error box when it answers null, so a second
-        // generic dialog here would be both redundant and wrong.
-        FileViewer? viewer = FileViewer.TryOpen(Theme, Ui, entry.FullPath);
-        if (viewer is null)
+        // Inside an archive the file is taken out to a scratch folder for the viewer to read, and
+        // the folder goes as soon as the viewer closes.
+        string? scratch = null;
+        string path = entry.FullPath;
+        if (ActiveFilePanel.InArchive)
         {
-            return;
+            string? extracted = ActiveFilePanel.ExtractToTemp(entry, out string? error);
+            if (extracted is null)
+            {
+                _ui.Error("View", error ?? "The file could not be extracted.");
+                return;
+            }
+
+            path = extracted;
+            scratch = Path.GetDirectoryName(extracted);
         }
 
-        viewer.SyntaxHighlight = Settings.SyntaxHighlight;
-
-        using (viewer)
+        try
         {
-            RunModal(viewer);
+            // TryOpen has already shown its own detailed error box when it answers null, so a
+            // second generic dialog here would be both redundant and wrong.
+            FileViewer? viewer = FileViewer.TryOpen(Theme, Ui, path);
+            if (viewer is null)
+            {
+                return;
+            }
+
+            viewer.SyntaxHighlight = Settings.SyntaxHighlight;
+
+            using (viewer)
+            {
+                RunModal(viewer);
+            }
+        }
+        finally
+        {
+            TempArea.Delete(scratch);
         }
     }
 
@@ -1151,6 +1177,11 @@ public sealed class Application : IAppContext, IDisposable
         if (entry.IsDirectory)
         {
             NotImplemented("File attributes");
+            return;
+        }
+
+        if (RefuseInArchive(ActiveFilePanel, "Edit"))
+        {
             return;
         }
 
@@ -1174,6 +1205,11 @@ public sealed class Application : IAppContext, IDisposable
     public void EditNewFile()
     {
         FilePanel panel = ActiveFilePanel;
+        if (RefuseInArchive(panel, "Edit"))
+        {
+            return;
+        }
+
         string? name = _ui.Input("Edit", "Create and edit the file:", string.Empty, "newfile");
 
         if (string.IsNullOrWhiteSpace(name))
@@ -1211,6 +1247,12 @@ public sealed class Application : IAppContext, IDisposable
         IReadOnlyList<FileEntry> sources = SourcesFor(panel, currentOnly);
         string title = move ? "Rename or move" : "Copy";
 
+        // Moving out of an archive would mean deleting from it, and archives are read-only here.
+        if (move && RefuseInArchive(panel, title))
+        {
+            return;
+        }
+
         if (sources.Count == 0)
         {
             _ui.Message(title, ["There is nothing to " + (move ? "move" : "copy") + "."], MessageButtons.Ok);
@@ -1232,7 +1274,22 @@ public sealed class Application : IAppContext, IDisposable
         }
 
         string destination = ResolvePath(panel.CurrentPath, answer);
+        if (DestinationInArchive(destination))
+        {
+            _ui.Message(
+                title,
+                ["Archives are read-only in Open Stus:", "nothing can be copied or moved into one."],
+                MessageButtons.Ok);
+            return;
+        }
+
         OperationOptions options = OperationOptionsFor(permanent: false);
+
+        if (panel.InArchive)
+        {
+            CopyOutOfArchive(panel, sources, destination, title, options);
+            return;
+        }
 
         OperationResult result = RunWithProgress(
             title,
@@ -1243,10 +1300,124 @@ public sealed class Application : IAppContext, IDisposable
         AfterOperation(title, result);
     }
 
+    /// <summary>
+    /// F5 inside an archive: the chosen entries are extracted to a scratch folder and copied from
+    /// there with the ordinary copy - so the destination rules, the overwrite questions and the
+    /// progress are exactly those of a copy between two folders.
+    /// </summary>
+    private void CopyOutOfArchive(
+        FilePanel panel,
+        IReadOnlyList<FileEntry> sources,
+        string destination,
+        string title,
+        OperationOptions options)
+    {
+        ArchiveFile? archive = panel.Archive;
+        if (archive is null)
+        {
+            return; // an unreadable archive lists nothing to copy
+        }
+
+        List<string> innerPaths = [.. sources.Select(panel.ArchiveInnerPathOf)];
+
+        string staging;
+        try
+        {
+            staging = TempArea.CreateDirectory();
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            _ui.Error(title, "Cannot create a scratch folder: " + e.Message);
+            return;
+        }
+
+        try
+        {
+            OperationResult result = RunWithProgress(
+                title,
+                (progress, report, overwrite, error) =>
+                {
+                    OperationResult extracted = archive.Extract(innerPaths, staging, progress, report);
+                    if (extracted.Cancelled)
+                    {
+                        return extracted;
+                    }
+
+                    List<FileEntry> staged =
+                        [.. FileSystemProvider.Read(staging, includeHidden: true).Entries.Where(static e => !e.IsParent)];
+
+                    progress.Reset();
+                    progress.Title = title;
+                    OperationResult copied = FileOperations.Copy(staged, destination, options, progress, report, overwrite, error);
+
+                    foreach (OperationError failure in extracted.Errors)
+                    {
+                        copied.AddError(failure.Operation, failure.Path, failure.Message, failure.Exception);
+                    }
+
+                    return copied;
+                });
+
+            AfterOperation(title, result);
+        }
+        finally
+        {
+            TempArea.Delete(staging);
+        }
+    }
+
+    /// <summary>
+    /// Whether a copy or move destination lies inside an archive: a path running on past an
+    /// archive file, or the archive itself when a panel is showing it as a folder. A plain archive
+    /// file named as the destination of a single file is still an ordinary overwrite.
+    /// </summary>
+    private bool DestinationInArchive(string destination)
+    {
+        if (FileSystemProvider.DirectoryExists(destination) ||
+            !ArchivePath.TrySplit(destination, out string archiveFile, out string innerPath))
+        {
+            return false;
+        }
+
+        if (innerPath.Length > 0 ||
+            destination.EndsWith(Path.DirectorySeparatorChar) ||
+            destination.EndsWith(Path.AltDirectorySeparatorChar))
+        {
+            return true;
+        }
+
+        return (_left.InArchive && string.Equals(_left.CurrentPath, archiveFile, PathComparison)) ||
+               (_right.InArchive && string.Equals(_right.CurrentPath, archiveFile, PathComparison));
+    }
+
+    /// <summary>
+    /// Refuses a command that would change the archive a panel is browsing - archives are
+    /// read-only here - and says how to get at the files instead.
+    /// </summary>
+    /// <returns><see langword="true"/> when the command was refused.</returns>
+    private bool RefuseInArchive(FilePanel panel, string title)
+    {
+        if (!panel.InArchive)
+        {
+            return false;
+        }
+
+        _ui.Message(
+            title,
+            ["Archives are read-only in Open Stus.", "Copy the files out with F5 to change them."],
+            MessageButtons.Ok);
+        return true;
+    }
+
     /// <summary>Creates a folder, nested paths included (F7).</summary>
     public void MakeDirectory()
     {
         FilePanel panel = ActiveFilePanel;
+        if (RefuseInArchive(panel, "Create folder"))
+        {
+            return;
+        }
+
         string? name = _ui.Input("Create folder", "Create the folder:", string.Empty, "mkdir");
 
         if (string.IsNullOrWhiteSpace(name))
@@ -1277,6 +1448,11 @@ public sealed class Application : IAppContext, IDisposable
     {
         FilePanel panel = ActiveFilePanel;
         IReadOnlyList<FileEntry> sources = SourcesFor(panel, currentOnly);
+
+        if (RefuseInArchive(panel, "Delete"))
+        {
+            return;
+        }
 
         if (sources.Count == 0)
         {
@@ -1436,14 +1612,55 @@ public sealed class Application : IAppContext, IDisposable
 
         panel.IsVisible = true;
         Layout();
-        panel.Navigate(drives[index].Root);
+        panel.Navigate(DriveTarget(drives, index, (left ? _right : _left).CurrentPath));
         _dirty = true;
+    }
+
+    /// <summary>
+    /// Where picking a drive in the drive menu leads: the other panel's folder when the other panel
+    /// is on that very drive - the quickest way to line both panels up - and the drive's root
+    /// otherwise.
+    /// </summary>
+    /// <param name="drives">The drives the menu offered.</param>
+    /// <param name="picked">The index of the drive picked.</param>
+    /// <param name="otherPath">The other panel's folder.</param>
+    /// <returns>The folder to show.</returns>
+    public static string DriveTarget(IReadOnlyList<DriveList.DriveItem> drives, int picked, string? otherPath)
+    {
+        ArgumentNullException.ThrowIfNull(drives);
+
+        string root = drives[picked].Root;
+        if (string.IsNullOrEmpty(otherPath))
+        {
+            return root;
+        }
+
+        // The longest matching root owns the path: on Unix "/" matches everything, and a mount
+        // point such as "/mnt/data" is the drive that actually holds a path underneath it.
+        int owner = -1;
+        for (int i = 0; i < drives.Count; i++)
+        {
+            string candidate = drives[i].Root;
+            if (candidate.Length > 0 &&
+                otherPath.StartsWith(candidate, PathComparison) &&
+                (owner < 0 || candidate.Length > drives[owner].Root.Length))
+            {
+                owner = i;
+            }
+        }
+
+        return owner == picked ? otherPath : root;
     }
 
     /// <summary>Runs a recursive file search and jumps to what the user picks (Alt+F7).</summary>
     public void FindFiles()
     {
         FilePanel panel = ActiveFilePanel;
+        if (panel.InArchive)
+        {
+            _ui.Message("Find file", ["Find file searches folders on disk.", "Leave the archive to search from here."], MessageButtons.Ok);
+            return;
+        }
 
         string? mask = _ui.Input("Find file", "A file mask or several file masks:", "*", "findmask");
         if (mask is null)
@@ -1594,6 +1811,19 @@ public sealed class Application : IAppContext, IDisposable
             return;
         }
 
+        // Inside an archive the catalogue already knows every size; nothing needs walking.
+        if (panel.Archive is ArchiveFile archive)
+        {
+            DirectorySize sum = DirectorySize.Empty;
+            foreach (FileEntry target in targets)
+            {
+                sum += archive.Measure(panel.ArchiveInnerPathOf(target));
+            }
+
+            ShowSizeMessage(targets, sum);
+            return;
+        }
+
         var dialog = new ProgressDialog(Theme, "Folder size");
         dialog.Layout(ModalArea);
 
@@ -1636,8 +1866,10 @@ public sealed class Application : IAppContext, IDisposable
             _dirty = true;
         }
 
-        DirectorySize total = DirectorySizeCalculator.Total(results);
+        ShowSizeMessage(targets, DirectorySizeCalculator.Total(results));
+    }
 
+    private void ShowSizeMessage(List<FileEntry> targets, DirectorySize total) =>
         _ui.Message(
             "Folder size",
             [
@@ -1649,7 +1881,6 @@ public sealed class Application : IAppContext, IDisposable
                     (total.Complete ? string.Empty : "  (incomplete)"),
             ],
             MessageButtons.Ok);
-    }
 
     /// <summary>Tags the entries that are missing from, or newer than, the other panel's.</summary>
     public void CompareDirectories()
@@ -2013,7 +2244,7 @@ public sealed class Application : IAppContext, IDisposable
             return;
         }
 
-        string path = ActiveFilePanel.CurrentPath;
+        string path = ActiveFilePanel.WorkingDirectory;
         if (string.IsNullOrEmpty(path) || string.Equals(path, _workingDirectory, PathComparison))
         {
             return;
@@ -2288,7 +2519,9 @@ public sealed class Application : IAppContext, IDisposable
         {
             string expanded = Environment.ExpandEnvironmentVariables(path.Trim().Trim('"'));
             string full = Path.GetFullPath(expanded);
-            return Directory.Exists(full) ? full : null;
+
+            // An archive, or a folder inside one, is a place a panel can start in too.
+            return ArchivePath.CanNavigate(full) ? full : null;
         }
         catch (Exception e) when (e is ArgumentException or NotSupportedException or PathTooLongException or IOException or UnauthorizedAccessException)
         {

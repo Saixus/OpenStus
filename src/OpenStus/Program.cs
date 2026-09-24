@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Text;
+using OpenStus.Archives;
 using OpenStus.Core;
 using OpenStus.Rendering;
 
@@ -151,7 +152,15 @@ internal static class Program
     /// <returns>The application's exit code.</returns>
     private static int Interactive(CommandLineArgs args)
     {
-        using var app = Application.Create(args);
-        return app.Run();
+        try
+        {
+            using var app = Application.Create(args);
+            return app.Run();
+        }
+        finally
+        {
+            // Whatever was taken out of archives to be viewed or run goes with the session.
+            TempArea.Cleanup();
+        }
     }
 }

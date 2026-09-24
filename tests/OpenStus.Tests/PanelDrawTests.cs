@@ -1048,6 +1048,31 @@ public class PanelSelectionTests
         Assert.Equal(theme.PanelSelectedFile, panel.StyleFor(hiddenDir, onCursor: false));
     }
 
+    /// <summary>
+    /// Backups and temporaries take their own brown, media its own light red, and both still yield
+    /// to hidden, to the cursor and to a tag.
+    /// </summary>
+    [Fact]
+    public void BackupsTemporariesAndMediaHaveTheirOwnColours()
+    {
+        var panel = PanelFixture.Panel();
+        Theme theme = panel.Theme;
+
+        FileEntry backup = new() { Name = "HFDB-DEV-CLEAN.bak", FullPath = Path.Combine(PanelFixture.DemoPath, "HFDB-DEV-CLEAN.bak") };
+        FileEntry database = new() { Name = "HFDB-DEV-CLEAN.mdf", FullPath = Path.Combine(PanelFixture.DemoPath, "HFDB-DEV-CLEAN.mdf") };
+        FileEntry picture = new() { Name = "logo.png", FullPath = Path.Combine(PanelFixture.DemoPath, "logo.png") };
+        FileEntry hiddenTemp = new() { Name = "~$draft.docx", Attributes = FileAttributes.Hidden };
+
+        Assert.Equal(theme.PanelTemporary, panel.StyleFor(backup, onCursor: false));
+        Assert.Equal(theme.PanelText, panel.StyleFor(database, onCursor: false));
+        Assert.Equal(theme.PanelMedia, panel.StyleFor(picture, onCursor: false));
+        Assert.Equal(theme.PanelHidden, panel.StyleFor(hiddenTemp, onCursor: false));
+
+        Assert.Equal(theme.PanelCursor, panel.StyleFor(backup, onCursor: true));
+        backup.Selected = true;
+        Assert.Equal(theme.PanelSelectedFile, panel.StyleFor(backup, onCursor: false));
+    }
+
     [Fact]
     public void SelectedOrCurrentFallsBackToTheCursorButNeverToTheParentEntry()
     {

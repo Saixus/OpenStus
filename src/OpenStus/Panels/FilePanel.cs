@@ -1,7 +1,9 @@
 using System.Globalization;
+using OpenStus.Archives;
 using OpenStus.Core;
 using OpenStus.Files;
 using OpenStus.Input;
+using OpenStus.Operations;
 using OpenStus.Rendering;
 using OpenStus.Theming;
 using OpenStus.Ui;
@@ -70,6 +72,13 @@ public sealed class FilePanel : IFilePanel
     private long _totalBytes;
     private bool? _shiftSelection;
 
+    // Inside an archive: the archive file (set even when it failed to open, so the panel still
+    // knows where it is), its catalogue, the folder inside it, and why it could not be read.
+    private string? _archiveFile;
+    private ArchiveFile? _archive;
+    private string _archiveInner = string.Empty;
+    private string? _archiveError;
+
     /// <summary>Creates a panel.</summary>
     /// <param name="ctx">
     /// The application context, or <see langword="null"/> when the panel is built before the shell
@@ -112,6 +121,32 @@ public sealed class FilePanel : IFilePanel
 
     /// <inheritdoc/>
     public string CurrentPath => _path;
+
+    /// <summary>Whether the panel is showing the inside of an archive rather than a folder.</summary>
+    public bool InArchive => _archiveFile is not null;
+
+    /// <summary>The archive being browsed, or <see langword="null"/> outside one or when it could not be read.</summary>
+    public ArchiveFile? Archive => _archive;
+
+    /// <summary>The <c>/</c> separated folder inside the archive; empty at its root or outside one.</summary>
+    public string ArchiveInnerPath => _archiveInner;
+
+    /// <summary>
+    /// The real folder behind the panel: the folder shown, or - inside an archive - the one holding
+    /// the archive file. Commands run here, since a path inside an archive is not a place a
+    /// process can start in.
+    /// </summary>
+    public string WorkingDirectory =>
+        _archiveFile is null ? _path : Path.GetDirectoryName(_archiveFile) ?? _path;
+
+    /// <summary>The path inside the archive of an entry of this panel.</summary>
+    /// <param name="entry">An entry of the current listing.</param>
+    /// <returns>The <c>/</c> separated path.</returns>
+    public string ArchiveInnerPathOf(FileEntry entry)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+        return ArchiveFile.Join(_archiveInner, entry.Name);
+    }
 
     /// <inheritdoc/>
     public FileEntry? Current =>
@@ -276,6 +311,7 @@ public sealed class FilePanel : IFilePanel
         _quickSearch.Cancel();
         _shiftSelection = null;
         _top = 0;
+        ResolveArchive(_path);
         Load(focusName);
         _history.Push(_path);
     }
@@ -287,6 +323,14 @@ public sealed class FilePanel : IFilePanel
         int top = _top;
         _quickSearch.Cancel();
         _shiftSelection = null;
+
+        // A re-read inside an archive only reopens it when the file on disk has changed - a
+        // tarball is decompressed end to end to read its catalogue.
+        if (_archiveFile is not null && (_archive is null || !_archive.IsCurrent()))
+        {
+            OpenArchive(_archiveFile, _archiveInner);
+        }
+
         Load(focus);
 
         if (keepPosition)
@@ -452,7 +496,7 @@ public sealed class FilePanel : IFilePanel
         for (int i = 0; i < paths.Count; i++)
         {
             string path = paths[i];
-            if (string.IsNullOrWhiteSpace(path) || !FileSystemProvider.DirectoryExists(path))
+            if (string.IsNullOrWhiteSpace(path) || !ArchivePath.CanNavigate(path))
             {
                 continue;
             }
@@ -1115,7 +1159,8 @@ public sealed class FilePanel : IFilePanel
 
     /// <summary>
     /// Picks the colour for one entry, in the fixed precedence
-    /// cursor &gt; tagged &gt; hidden or system &gt; directory &gt; archive &gt; executable &gt; plain file.
+    /// cursor &gt; tagged &gt; hidden or system &gt; directory &gt; archive &gt; executable &gt;
+    /// backup or temporary &gt; media &gt; plain file.
     /// </summary>
     /// <remarks>
     /// Hidden and system deliberately outrank directory. A drive root's <c>$Recycle.Bin</c>,
@@ -1156,7 +1201,17 @@ public sealed class FilePanel : IFilePanel
             return Theme.PanelArchive;
         }
 
-        return entry.IsExecutable ? Theme.PanelExecutable : Theme.PanelText;
+        if (entry.IsExecutable)
+        {
+            return Theme.PanelExecutable;
+        }
+
+        if (entry.IsTemporary)
+        {
+            return Theme.PanelTemporary;
+        }
+
+        return entry.IsMedia ? Theme.PanelMedia : Theme.PanelText;
     }
 
     // ------------------------------------------------------------ key handling
@@ -1476,6 +1531,10 @@ public sealed class FilePanel : IFilePanel
         _cursor = 0;
         _top = 0;
         _shiftSelection = null;
+        _archiveFile = null;
+        _archive = null;
+        _archiveInner = string.Empty;
+        _archiveError = null;
         Recount();
     }
 
@@ -1631,14 +1690,86 @@ public sealed class FilePanel : IFilePanel
             return;
         }
 
+        if (_archiveFile is not null)
+        {
+            // A file inside an archive has no path a program could open, so it is taken out to
+            // the scratch area first and run from there.
+            string? extracted = ExtractToTemp(current, out string? error);
+            if (extracted is null)
+            {
+                app?.Ui.Error("Open", error ?? "The file could not be extracted.");
+                return;
+            }
+
+            app?.RunShellCommand("\"" + extracted + "\"");
+            return;
+        }
+
+        if (ArchiveFile.CanOpen(current.Name))
+        {
+            Navigate(current.FullPath);
+            return;
+        }
+
         app?.RunShellCommand("\"" + current.FullPath + "\"");
+    }
+
+    /// <summary>
+    /// Extracts one entry of the archive being browsed into a fresh scratch folder, for viewing or
+    /// running. The caller owns the folder and deletes it with <see cref="TempArea.Delete"/> when done.
+    /// </summary>
+    /// <param name="entry">A file of the current listing.</param>
+    /// <param name="error">Why it failed, or <see langword="null"/>.</param>
+    /// <returns>The extracted file's full path, or <see langword="null"/> on failure.</returns>
+    public string? ExtractToTemp(FileEntry entry, out string? error)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+
+        error = null;
+        if (_archive is null)
+        {
+            error = _archiveError ?? "The panel is not inside an archive.";
+            return null;
+        }
+
+        string folder;
+        try
+        {
+            folder = TempArea.CreateDirectory();
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            error = e.Message;
+            return null;
+        }
+
+        OperationResult result = _archive.Extract([ArchiveInnerPathOf(entry)], folder);
+        if (result.HasErrors || result.Cancelled)
+        {
+            error = result.FirstError?.Message ?? "The extraction was cancelled.";
+            TempArea.Delete(folder);
+            return null;
+        }
+
+        return Path.Combine(folder, entry.Name);
     }
 
     private void EnterCurrentDirectory()
     {
         FileEntry? current = Current;
-        if (current is null || !current.IsDirectory)
+        if (current is null)
         {
+            return;
+        }
+
+        if (!current.IsDirectory)
+        {
+            // Ctrl+PgDn walks into an archive exactly as it walks into a folder.
+            if (_archiveFile is null && ArchiveFile.CanOpen(current.Name))
+            {
+                Navigate(current.FullPath);
+            }
+
             return;
         }
 
@@ -1805,15 +1936,115 @@ public sealed class FilePanel : IFilePanel
 
     private void Load(string? focusName)
     {
-        DirectoryListing listing = FileSystemProvider.Read(
-            _path,
-            Settings.ShowHiddenFiles,
-            MakeComparer());
+        DirectoryListing listing = _archiveFile is not null
+            ? ReadArchive()
+            : FileSystemProvider.Read(_path, Settings.ShowHiddenFiles, MakeComparer());
 
         _entries = [.. listing.Entries];
         _error = listing.Error;
         Recount();
         FocusOn(focusName);
+    }
+
+    /// <summary>
+    /// Works out whether a path lies inside an archive and, when it does, opens that archive - or
+    /// keeps the one already open when the path is still inside it, so walking around a big
+    /// tarball does not decompress it at every step.
+    /// </summary>
+    private void ResolveArchive(string path)
+    {
+        if (_archive is not null && ArchivePath.TryGetInner(path, _archive.FilePath, out string inner))
+        {
+            _archiveInner = inner;
+            return;
+        }
+
+        _archiveFile = null;
+        _archive = null;
+        _archiveInner = string.Empty;
+        _archiveError = null;
+
+        if (FileSystemProvider.DirectoryExists(path) ||
+            !ArchivePath.TrySplit(path, out string file, out string innerPath))
+        {
+            return;
+        }
+
+        OpenArchive(file, innerPath);
+    }
+
+    private void OpenArchive(string file, string innerPath)
+    {
+        _archiveFile = file;
+        _archiveInner = innerPath;
+        _archiveError = null;
+
+        try
+        {
+            _archive = ArchiveFile.Open(file);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidDataException or FormatException or NotSupportedException or ArgumentException)
+        {
+            _archive = null;
+            _archiveError = "Cannot read the archive: " + e.Message;
+        }
+    }
+
+    /// <summary>
+    /// The listing of the folder inside the archive, built from its catalogue the way the file
+    /// system listing is built from the disk: <c>".."</c> first, hidden entries filtered, sorted.
+    /// </summary>
+    private DirectoryListing ReadArchive()
+    {
+        DateTime stamp = _archive?.FileStamp ?? default;
+        var entries = new List<FileEntry>
+        {
+            new()
+            {
+                Name = "..",
+                FullPath = FileSystemProvider.GetParent(_path) ?? WorkingDirectory,
+                IsDirectory = true,
+                IsParent = true,
+                Attributes = FileAttributes.Directory,
+                Modified = stamp,
+                Created = stamp,
+                Accessed = stamp,
+            },
+        };
+
+        if (_archive is null)
+        {
+            return new DirectoryListing(_path, entries, _archiveError ?? "Cannot read the archive");
+        }
+
+        if (!_archive.IsDirectory(_archiveInner))
+        {
+            return new DirectoryListing(_path, entries, $"Cannot find \"{_archiveInner}\" in the archive");
+        }
+
+        bool includeHidden = Settings.ShowHiddenFiles;
+        foreach (ArchiveItem item in _archive.List(_archiveInner))
+        {
+            var entry = new FileEntry
+            {
+                Name = item.Name,
+                FullPath = ArchivePath.Combine(_archive.FilePath, item.Path),
+                IsDirectory = item.IsDirectory,
+                Size = item.Size,
+                Modified = item.Modified,
+                Created = item.Modified,
+                Accessed = item.Modified,
+                Attributes = item.Attributes == 0 ? FileAttributes.Normal : item.Attributes,
+                UnixExecutable = false,
+            };
+
+            if (includeHidden || !entry.IsHidden)
+            {
+                entries.Add(entry);
+            }
+        }
+
+        return new DirectoryListing(_path, [.. entries.OrderBy(static e => e, MakeComparer())], null);
     }
 
     private void Resort()

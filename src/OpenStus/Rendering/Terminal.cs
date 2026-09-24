@@ -4,6 +4,34 @@ using System.Text;
 namespace OpenStus.Rendering;
 
 /// <summary>
+/// The hardware cursor's shape, as the DECSCUSR sequence (<c>CSI n SP q</c>) sets it; each value is
+/// that sequence's parameter.
+/// </summary>
+public enum CursorShape
+{
+    /// <summary>Whatever the user configured for their terminal.</summary>
+    Default = 0,
+
+    /// <summary>A blinking block.</summary>
+    BlinkingBlock = 1,
+
+    /// <summary>A steady block.</summary>
+    SteadyBlock = 2,
+
+    /// <summary>A blinking underline.</summary>
+    BlinkingUnderline = 3,
+
+    /// <summary>A steady underline.</summary>
+    SteadyUnderline = 4,
+
+    /// <summary>A blinking vertical bar - the text editing caret.</summary>
+    BlinkingBar = 5,
+
+    /// <summary>A steady vertical bar.</summary>
+    SteadyBar = 6,
+}
+
+/// <summary>
 /// Owns the physical console: virtual terminal setup, the alternate screen buffer, the console
 /// modes, and the diff-based flush of a <see cref="ScreenBuffer"/> to stdout.
 /// </summary>
@@ -36,11 +64,11 @@ public sealed class Terminal : IDisposable
     private const string Prologue = Esc + "[?1049h" + Esc + "[?25l" + Esc + "[?7l" + Esc + "[2J" + Esc + "[H";
 
     // End any open synchronized update, turn mouse reporting off, autowrap back on, reset SGR,
-    // show the cursor, and only then leave the alternate buffer.
+    // put the user's own cursor shape back and show it, and only then leave the alternate buffer.
     private const string Epilogue =
         Esc + "[?2026l" +
         Esc + "[?1006l" + Esc + "[?1015l" + Esc + "[?1003l" + Esc + "[?1002l" + Esc + "[?1000l" +
-        Esc + "[?7h" + Esc + "[0m" + Esc + "[?25h" + Esc + "[?1049l";
+        Esc + "[?7h" + Esc + "[0m" + Esc + "[0 q" + Esc + "[?25h" + Esc + "[?1049l";
 
     private readonly object _sync = new();
     private readonly bool _forcedSize;
@@ -61,6 +89,8 @@ public sealed class Terminal : IDisposable
     private int _cursorY;
     private bool _cursorVisible;
     private bool _lastEmittedCursorVisible;
+    private CursorShape _cursorShape;
+    private CursorShape _lastEmittedShape;
 
     // The raw input mode captured by SuspendConsoleInputMode, so RestoreConsoleInputMode can put
     // back exactly what the input backend had established - mouse reporting bits included.
@@ -322,11 +352,13 @@ public sealed class Terminal : IDisposable
                 return;
             }
 
-            // End any open synchronized update, put autowrap and the colours back, show the
-            // cursor, and only then switch buffers - the same order the epilogue uses.
-            _writer.Write(Esc + "[?2026l" + Esc + "[?7h" + Esc + "[0m" + Esc + "[?25h" + Esc + "[?1049l");
+            // End any open synchronized update, put autowrap, the colours and the user's cursor
+            // shape back, show the cursor, and only then switch buffers - the same order the
+            // epilogue uses.
+            _writer.Write(Esc + "[?2026l" + Esc + "[?7h" + Esc + "[0m" + Esc + "[0 q" + Esc + "[?25h" + Esc + "[?1049l");
             _writer.Flush();
             _altScreen = false;
+            _lastEmittedShape = CursorShape.Default;
         }
     }
 
@@ -385,11 +417,19 @@ public sealed class Terminal : IDisposable
     }
 
     /// <summary>Positions the hardware cursor, applied at the end of the next <see cref="Render"/>.</summary>
-    public void SetCursor(int x, int y, bool visible)
+    /// <param name="x">The column.</param>
+    /// <param name="y">The row.</param>
+    /// <param name="visible">Whether the cursor is shown at all.</param>
+    /// <param name="shape">
+    /// The cursor's shape while shown; <see cref="CursorShape.Default"/> leaves it to the user's
+    /// terminal settings. Only a change of shape is written, so repeating one costs nothing.
+    /// </param>
+    public void SetCursor(int x, int y, bool visible, CursorShape shape = CursorShape.Default)
     {
         _cursorX = x;
         _cursorY = y;
         _cursorVisible = visible;
+        _cursorShape = shape;
     }
 
     /// <summary>
@@ -581,6 +621,13 @@ public sealed class Terminal : IDisposable
             int cx = Math.Clamp(_cursorX, 0, w - 1);
             int cy = Math.Clamp(_cursorY, 0, h - 1);
             sb.Append(Esc).Append('[').Append(cy + 1).Append(';').Append(cx + 1).Append('H');
+
+            if (_cursorShape != _lastEmittedShape)
+            {
+                sb.Append(Esc).Append('[').Append((int)_cursorShape).Append(" q");
+                _lastEmittedShape = _cursorShape;
+            }
+
             sb.Append(Esc).Append("[?25h");
         }
 
