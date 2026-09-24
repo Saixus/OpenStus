@@ -29,9 +29,28 @@ public static class SyntaxRegistry
         return Table.TryGetValue(extension, out SyntaxRules? rules) ? rules : null;
     }
 
-    /// <summary>Every language shipped, for the tests that walk them.</summary>
+    /// <summary>
+    /// The rules for a file, falling back to <see cref="PlainText"/> for a type no language
+    /// claims - how the editor colours numbers, strings and comment lines in a log, an ini or a
+    /// file with no extension at all.
+    /// </summary>
+    /// <param name="path">The file path or bare name.</param>
+    /// <returns>The rules; never <see langword="null"/>.</returns>
+    public static SyntaxRules ForPathOrPlainText(string? path) => ForPath(path) ?? PlainText;
+
+    /// <summary>Every language shipped, plain text included, for the tests that walk them.</summary>
     public static IReadOnlyCollection<SyntaxRules> All =>
-        Table.Values.Distinct().ToArray();
+        Table.Values.Append(PlainText).Distinct().ToArray();
+
+    /// <summary>The fallback for files of unknown type; see <see cref="SyntaxFamily.PlainText"/>.</summary>
+    public static SyntaxRules PlainText { get; } = new()
+    {
+        Name = "Plain text",
+        Family = SyntaxFamily.PlainText,
+        Keywords = SyntaxRules.Words(caseSensitive: true,
+            "true", "false", "null", "True", "False", "None", "TRUE", "FALSE", "NULL",
+            "FATAL", "CRITICAL", "ERROR", "ERR", "WARNING", "WARN", "INFO", "DEBUG", "TRACE"),
+    };
 
     // ------------------------------------------------------------------ the languages
 

@@ -773,6 +773,25 @@ public class TerminalDiffTests
         Assert.EndsWith("\u001b[2;3H\u001b[?25h" + End, frame, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The editor asks for a blinking bar. The shape is written once, when it changes, and handed
+    /// back to the user's own shape as soon as the default is asked for again.
+    /// </summary>
+    [Fact]
+    public void ACursorShapeIsWrittenOnlyWhenItChanges()
+    {
+        using var t = Terminal.Create(6, 2);
+
+        t.SetCursor(1, 0, visible: true, CursorShape.BlinkingBar);
+        Assert.EndsWith("\u001b[1;2H\u001b[5 q\u001b[?25h" + End, t.BuildFrameText(), StringComparison.Ordinal);
+
+        t.SetCursor(2, 0, visible: true, CursorShape.BlinkingBar);
+        Assert.DoesNotContain(" q", t.BuildFrameText(), StringComparison.Ordinal);
+
+        t.SetCursor(2, 0, visible: true);
+        Assert.Contains("\u001b[0 q", t.BuildFrameText(), StringComparison.Ordinal);
+    }
+
     [Fact]
     public void AnOutOfRangeCursorIsClampedIntoTheBuffer()
     {

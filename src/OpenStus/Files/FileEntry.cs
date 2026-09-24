@@ -104,6 +104,12 @@ public sealed class FileEntry
     /// <summary>Whether the extension is one of the archive formats the panel colours differently.</summary>
     public bool IsArchive => !IsDirectory && FileTypeClassifier.IsArchiveExtension(Extension);
 
+    /// <summary>Whether the name marks a backup or temporary file (<c>*.bak</c>, <c>*.tmp</c>, <c>*~</c>...).</summary>
+    public bool IsTemporary => !IsDirectory && FileTypeClassifier.IsTemporaryName(Name);
+
+    /// <summary>Whether the extension is an image, sound or video format.</summary>
+    public bool IsMedia => !IsDirectory && FileTypeClassifier.IsMediaExtension(Extension);
+
     /// <summary>
     /// The extension in lower case and <em>without</em> the dot, or an empty string when the name
     /// has none. A leading dot is part of the name (<c>".gitignore"</c> has no extension).

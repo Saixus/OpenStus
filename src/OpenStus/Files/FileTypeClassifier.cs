@@ -6,7 +6,8 @@ namespace OpenStus.Files;
 /// <remarks>
 /// The panel adds the two states the file system knows nothing about - the cursor bar and the tag
 /// mark - on top of this, giving the full order
-/// cursor &gt; tagged &gt; directory &gt; hidden &gt; archive &gt; executable &gt; normal.
+/// cursor &gt; tagged &gt; directory &gt; hidden &gt; archive &gt; executable &gt; temporary &gt;
+/// media &gt; normal.
 /// </remarks>
 public enum FileCategory
 {
@@ -24,6 +25,12 @@ public enum FileCategory
 
     /// <summary>A file that runs.</summary>
     Executable,
+
+    /// <summary>A backup or temporary file: <c>*.bak</c>, <c>*.tmp</c>, <c>*~</c> and the like.</summary>
+    Temporary,
+
+    /// <summary>An image, sound or video file.</summary>
+    Media,
 }
 
 /// <summary>
@@ -41,7 +48,26 @@ public static class FileTypeClassifier
         ["bat", "cmd", "com", "exe", "msi", "ps1"];
 
     private static readonly string[] ArchiveList =
-        ["7z", "bz2", "cab", "gz", "iso", "rar", "tar", "xz", "zip"];
+        ["7z", "apk", "arj", "bz2", "cab", "deb", "ear", "gz", "iso", "jar", "lz", "lzh", "lzma",
+         "nupkg", "rar", "rpm", "tar", "tbz2", "tgz", "txz", "vsix", "war", "whl", "wim", "xz", "z",
+         "zip", "zst"];
+
+    private static readonly string[] TemporaryList =
+        ["$$$", "backup", "bak", "bk", "bkp", "crdownload", "dmp", "mdmp", "old", "orig", "part",
+         "partial", "rej", "swo", "swp", "temp", "tmp"];
+
+    private static readonly string[] MediaList =
+        [
+            // Images.
+            "avif", "bmp", "gif", "heic", "ico", "jpeg", "jpg", "png", "psd", "svg", "tga", "tif",
+            "tiff", "webp",
+
+            // Sound.
+            "aac", "aiff", "flac", "m4a", "mid", "midi", "mp3", "ogg", "opus", "wav", "wma",
+
+            // Video.
+            "3gp", "avi", "flv", "m4v", "mkv", "mov", "mp4", "mpeg", "mpg", "webm", "wmv",
+        ];
 
     private static readonly HashSet<string> ExecutableSet =
         new(ExecutableList, StringComparer.OrdinalIgnoreCase);
@@ -49,11 +75,44 @@ public static class FileTypeClassifier
     private static readonly HashSet<string> ArchiveSet =
         new(ArchiveList, StringComparer.OrdinalIgnoreCase);
 
+    private static readonly HashSet<string> TemporarySet =
+        new(TemporaryList, StringComparer.OrdinalIgnoreCase);
+
+    private static readonly HashSet<string> MediaSet =
+        new(MediaList, StringComparer.OrdinalIgnoreCase);
+
     /// <summary>The extensions (lower case, no dot) treated as executables on Windows.</summary>
     public static IReadOnlyList<string> ExecutableExtensions => ExecutableList;
 
     /// <summary>The extensions (lower case, no dot) treated as archives on every platform.</summary>
     public static IReadOnlyList<string> ArchiveExtensions => ArchiveList;
+
+    /// <summary>The extensions (lower case, no dot) treated as backup or temporary files.</summary>
+    public static IReadOnlyList<string> TemporaryExtensions => TemporaryList;
+
+    /// <summary>The extensions (lower case, no dot) treated as images, sound and video.</summary>
+    public static IReadOnlyList<string> MediaExtensions => MediaList;
+
+    /// <summary>
+    /// Tests whether a file name is a backup or temporary file: a temporary extension, an editor
+    /// backup ending in <c>~</c>, or an Office owner file starting with <c>~$</c>.
+    /// </summary>
+    /// <param name="name">The file name.</param>
+    /// <returns><see langword="true"/> for a backup or temporary file.</returns>
+    public static bool IsTemporaryName(string? name) =>
+        !string.IsNullOrEmpty(name) &&
+        (name.EndsWith('~') ||
+         name.StartsWith("~$", StringComparison.Ordinal) ||
+         TemporarySet.Contains(ExtensionOf(name)));
+
+    /// <summary>
+    /// Tests whether <paramref name="extension"/> - written without a dot, in any case - is an
+    /// image, sound or video extension.
+    /// </summary>
+    /// <param name="extension">The extension to test.</param>
+    /// <returns><see langword="true"/> for a media extension.</returns>
+    public static bool IsMediaExtension(string? extension) =>
+        !string.IsNullOrEmpty(extension) && MediaSet.Contains(extension);
 
     /// <summary>
     /// Tests whether <paramref name="extension"/> - written without a dot, in any case - is one of
@@ -180,6 +239,16 @@ public static class FileTypeClassifier
             return FileCategory.Archive;
         }
 
-        return entry.IsExecutable ? FileCategory.Executable : FileCategory.Normal;
+        if (entry.IsExecutable)
+        {
+            return FileCategory.Executable;
+        }
+
+        if (entry.IsTemporary)
+        {
+            return FileCategory.Temporary;
+        }
+
+        return entry.IsMedia ? FileCategory.Media : FileCategory.Normal;
     }
 }

@@ -8,6 +8,32 @@ All notable changes to Open Stus are recorded here. The format follows
 
 ### Added
 
+- **Archives open in the panel.** Enter (or `Ctrl+PgDn`) on a zip - and its relatives jar, war,
+  nupkg, vsix, whl, apk - a tar, a `.tar.gz` / `.tgz` or a lone `.gz` walks into it as if it were a
+  folder: the title and the prompt show `...\tools.zip\bin`, `..` climbs back out onto the archive,
+  F3 views a file, Enter runs one, `Ctrl+L` sizes a folder, and F5 copies files and folders out with
+  the ordinary copy's destination rules, overwrite questions and progress. Archives are read-only:
+  F4, F6, F7, F8 and copying into one say so instead of acting. A path inside an archive also works
+  from the folder history, the saved tabs and the command line (`stus C:\x\tools.zip`). Entry
+  names that climb out with `..` or start from a root are never extracted. 7z, rar, cab and iso
+  still open with the program the system associates with them.
+
+- **Selecting on the command line while the panels are hidden.** After `Ctrl+O`, Shift+Left /
+  Shift+Right, Shift+Home / Shift+End and the Ctrl+Shift word forms select text, `Ctrl+A` selects the
+  line, `Ctrl+C` or `Ctrl+Ins` copy the selection, `Shift+Del` cuts it, Backspace and Del remove it,
+  and typing or pasting replaces it. With the panels up those chords stay the panel's.
+
+- **Colour for files of unknown type in the editor.** A file no language claims - a log, an ini, a
+  `.txt`, a name with no extension - gets its numbers (dates, times, versions and addresses
+  included), closed quoted strings, URLs, `#` / `;` / `//` comment lines, `[section]` headers and
+  words such as `true`, `null`, `ERROR` and `WARN` coloured. F5 in the editor switches the colouring
+  off and on again; the key bar shows which way it will go.
+
+- **More file-type colours.** Backups and temporaries (`*.bak`, `*.tmp`, `*.old`, `*.orig`,
+  `*.swp`, `*.$$$`, `*~`, `~$*` and the like) are brown and media (images, sound, video) light red;
+  both are theme entries, `PanelTemporary` and `PanelMedia`. More archive extensions (`tgz`, `jar`,
+  `nupkg`, `zst`, `deb`, `rpm` and others) take the archive colour.
+
 - **A startup notice on the user screen.** Before the panels come up, the program prints a text
   portrait of Vasyl Stus beside the version, the licence and the credit for the photograph, so
   `Ctrl+O` reveals it underneath the panels the way it reveals command output. The portrait is
@@ -151,6 +177,11 @@ the four reported issues at the top of this list.
 
 ### Changed
 
+- **The drive menu lines the panels up.** Picking, with `Alt+F1` / `Alt+F2`, the drive the other
+  panel is on opens the other panel's folder rather than the drive's root.
+- **The editor's caret is the console's own cursor.** It is no longer an inverted cell drawn into
+  the text but the terminal's blinking vertical bar - a blinking block while Insert has switched to
+  overwriting - and the terminal's own cursor shape is put back when the editor closes.
 - **Renamed to Open Stus.** The solution, the projects, the namespaces and the settings folder are
   `OpenStus`, and the executable is `stus` (it was `oc`). The name honours the poet Vasyl Stus; the
   README says why. Settings and history now live under `OpenStus` in the profile folder.

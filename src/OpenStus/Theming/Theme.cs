@@ -80,6 +80,12 @@ public sealed class Theme
     /// <summary>An archive file.</summary>
     public CellStyle PanelArchive { get; set; }
 
+    /// <summary>A backup or temporary file (<c>*.bak</c>, <c>*.tmp</c>, <c>*~</c>...).</summary>
+    public CellStyle PanelTemporary { get; set; }
+
+    /// <summary>An image, sound or video file.</summary>
+    public CellStyle PanelMedia { get; set; }
+
     /// <summary>A file tagged with Ins.</summary>
     public CellStyle PanelSelectedFile { get; set; }
 
@@ -340,8 +346,8 @@ public sealed class Theme
     /// <remarks>
     /// The only difference from <see cref="Classic"/> is the palette: a deeper
     /// <c>#000080</c> blue and a pure <c>#00FFFF</c> cyan instead of the DOS <c>#0000AA</c> and
-    /// <c>#55FFFF</c>, which lifts the dominant panel pair from 10.84:1 to 12.77:1. Every one of the
-    /// 74 entries below is identical.
+    /// <c>#55FFFF</c>, which lifts the dominant panel pair from 10.84:1 to 12.77:1. Every entry of
+    /// the colour table is identical.
     /// </remarks>
     public static Theme ClassicNt() => new() { Name = "Classic NT", Palette = Rendering.Palette.WindowsNt };
 
@@ -431,6 +437,11 @@ public sealed class Theme
         t.PanelHidden = new CellStyle(darkCyan, bBlue);          // hidden or system entries
         t.PanelExecutable = new CellStyle(lightGreen, bBlue);    // executables
         t.PanelArchive = new CellStyle(ConsoleColor.Magenta, bBlue); // archives
+
+        // Backups and temporaries recede in brown, next to the hidden entries' dark cyan: they
+        // are leftovers, not the files you came for. Media stands apart in light red.
+        t.PanelTemporary = new CellStyle(ConsoleColor.DarkYellow, bBlue); // *.bak, *.tmp, *~
+        t.PanelMedia = new CellStyle(ConsoleColor.Red, bBlue);       // images, sound, video
 
         t.PanelSelectedFile = new CellStyle(yellow, bBlue);      // tagged entries
         t.PanelCursor = new CellStyle(black, bCyan);             // cursor bar
@@ -552,6 +563,8 @@ public sealed class Theme
         new("PanelHidden", t => t.PanelHidden, (t, v) => t.PanelHidden = v),
         new("PanelExecutable", t => t.PanelExecutable, (t, v) => t.PanelExecutable = v),
         new("PanelArchive", t => t.PanelArchive, (t, v) => t.PanelArchive = v),
+        new("PanelTemporary", t => t.PanelTemporary, (t, v) => t.PanelTemporary = v),
+        new("PanelMedia", t => t.PanelMedia, (t, v) => t.PanelMedia = v),
         new("PanelSelectedFile", t => t.PanelSelectedFile, (t, v) => t.PanelSelectedFile = v),
         new("PanelCursor", t => t.PanelCursor, (t, v) => t.PanelCursor = v),
         new("PanelCursorSelected", t => t.PanelCursorSelected, (t, v) => t.PanelCursorSelected = v),

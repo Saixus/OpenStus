@@ -53,6 +53,9 @@ public static class SyntaxTokenizer
             case SyntaxFamily.Csv:
                 return TokenizeCsv(line, n, state, tokens);
 
+            case SyntaxFamily.PlainText:
+                return TokenizePlainText(line, n, rules, tokens);
+
             default:
                 break;
         }
@@ -436,6 +439,165 @@ public static class SyntaxTokenizer
         Emit(tokens, 0, end, kind);
         return end;
     }
+
+    // ---------------------------------------------------------------- the plain-text scanner
+
+    /// <summary>
+    /// Files no language claims, so the scanner has to be careful rather than clever: a whole
+    /// line starting with <c>#</c>, <c>;</c> or <c>//</c> is a comment and a line that is only a
+    /// <c>[section]</c> a keyword; a quote makes a string only when it closes on the same line;
+    /// a URL is a string; a number - dates, times, versions and addresses included - counts only
+    /// when it stands on its own rather than inside a word; and the rules' words
+    /// (<c>true</c>, <c>null</c>, <c>ERROR</c>...) are keywords. Nothing carries to the next line.
+    /// </summary>
+    private static SyntaxState TokenizePlainText(string line, int n, SyntaxRules rules, List<TokenSpan>? tokens)
+    {
+        int i = 0;
+        while (i < n && char.IsWhiteSpace(line[i]))
+        {
+            i++;
+        }
+
+        if (i < n && (line[i] is '#' or ';' || Matches(line, i, n, "//")))
+        {
+            Emit(tokens, i, n - i, TokenKind.Comment);
+            return SyntaxState.None;
+        }
+
+        if (i < n && line[i] == '[')
+        {
+            int close = line.IndexOf(']', i + 1, n - i - 1);
+            if (close > i + 1 && string.IsNullOrWhiteSpace(line[(close + 1)..n]))
+            {
+                Emit(tokens, i, close + 1 - i, TokenKind.Keyword);
+                return SyntaxState.None;
+            }
+        }
+
+        while (i < n)
+        {
+            char c = line[i];
+            bool boundary = i == 0 || !IsWordPart(line[i - 1]);
+
+            if (c == '"' || (c == '\'' && boundary))
+            {
+                int close = line.IndexOf(c, i + 1, n - i - 1);
+                if (close > i)
+                {
+                    Emit(tokens, i, close + 1 - i, TokenKind.String);
+                    i = close + 1;
+                    continue;
+                }
+
+                i++;
+                continue;
+            }
+
+            if (boundary && IsUrlStart(line, i, n))
+            {
+                int end = i;
+                while (end < n && !char.IsWhiteSpace(line[end]) && line[end] is not ('"' or '\'' or '<' or '>'))
+                {
+                    end++;
+                }
+
+                // Sentence punctuation after a link belongs to the sentence.
+                while (end > i && line[end - 1] is '.' or ',' or ';' or ':' or ')' or ']' or '!' or '?')
+                {
+                    end--;
+                }
+
+                Emit(tokens, i, end - i, TokenKind.String);
+                i = end;
+                continue;
+            }
+
+            if (char.IsAsciiDigit(c) && boundary)
+            {
+                int end = ScanPlainNumber(line, n, i);
+                if (end >= n || !IsWordPart(line[end]))
+                {
+                    Emit(tokens, i, end - i, TokenKind.Number);
+                }
+
+                // A number running into letters ("5px", "3rd", a hash) is a word, left plain.
+                while (end < n && IsWordPart(line[end]))
+                {
+                    end++;
+                }
+
+                i = end;
+                continue;
+            }
+
+            if (IsWordPart(c))
+            {
+                int start = i;
+                while (i < n && IsWordPart(line[i]))
+                {
+                    i++;
+                }
+
+                if (boundary && rules.Keywords.Contains(line[start..i]))
+                {
+                    Emit(tokens, start, i - start, TokenKind.Keyword);
+                }
+
+                continue;
+            }
+
+            i++;
+        }
+
+        return SyntaxState.None;
+    }
+
+    /// <summary>
+    /// A number in running text: hex after <c>0x</c>, otherwise digits joined by the separators
+    /// dates, times, versions and addresses use - each only when a digit follows it, so the full
+    /// stop ending a sentence stays out.
+    /// </summary>
+    private static int ScanPlainNumber(string line, int n, int at)
+    {
+        int i = at;
+        if (i + 2 < n && line[i] == '0' && line[i + 1] is 'x' or 'X' && char.IsAsciiHexDigit(line[i + 2]))
+        {
+            i += 2;
+            while (i < n && char.IsAsciiHexDigit(line[i]))
+            {
+                i++;
+            }
+
+            return i;
+        }
+
+        while (i < n)
+        {
+            if (char.IsAsciiDigit(line[i]))
+            {
+                i++;
+                continue;
+            }
+
+            if (line[i] is '.' or ',' or ':' or '-' or '/' && i + 1 < n && char.IsAsciiDigit(line[i + 1]))
+            {
+                i++;
+                continue;
+            }
+
+            break;
+        }
+
+        return i;
+    }
+
+    private static bool IsUrlStart(string line, int at, int n) =>
+        Matches(line, at, n, "http://") ||
+        Matches(line, at, n, "https://") ||
+        Matches(line, at, n, "ftp://") ||
+        Matches(line, at, n, "file://");
+
+    private static bool IsWordPart(char c) => char.IsLetterOrDigit(c) || c == '_';
 
     // ---------------------------------------------------------------- the CSV scanner
 

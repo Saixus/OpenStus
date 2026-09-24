@@ -238,8 +238,58 @@ public class FileTypeClassifierTests
             FileTypeClassifier.ExecutableExtensions.Order(StringComparer.Ordinal));
 
         Assert.Equal(
-            ["7z", "bz2", "cab", "gz", "iso", "rar", "tar", "xz", "zip"],
+            ["7z", "apk", "arj", "bz2", "cab", "deb", "ear", "gz", "iso", "jar", "lz", "lzh", "lzma",
+             "nupkg", "rar", "rpm", "tar", "tbz2", "tgz", "txz", "vsix", "war", "whl", "wim", "xz", "z",
+             "zip", "zst"],
             FileTypeClassifier.ArchiveExtensions.Order(StringComparer.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("HFConnect-2026-05-09-clean.bak")]
+    [InlineData("HFDB-DEV-CLEAN.BAK")]
+    [InlineData("setup.tmp")]
+    [InlineData("notes.txt~")]
+    [InlineData("~$report.docx")]
+    [InlineData("install.$$$")]
+    [InlineData(".main.swp")]
+    [InlineData("patch.orig")]
+    public void BackupAndTemporaryNamesAreRecognised(string name)
+    {
+        var entry = new FileEntry { Name = name };
+
+        Assert.True(entry.IsTemporary);
+        Assert.Equal(FileCategory.Temporary, FileTypeClassifier.Classify(entry));
+    }
+
+    [Theory]
+    [InlineData("HFDB-DEV-CLEAN.mdf")]
+    [InlineData("readme.txt")]
+    [InlineData("backup")]
+    [InlineData("tmp")]
+    public void OrdinaryNamesAreNotTemporary(string name) =>
+        Assert.False(new FileEntry { Name = name }.IsTemporary);
+
+    [Theory]
+    [InlineData("photo.JPG")]
+    [InlineData("logo.png")]
+    [InlineData("song.mp3")]
+    [InlineData("clip.mkv")]
+    public void MediaNamesAreRecognised(string name)
+    {
+        var entry = new FileEntry { Name = name };
+
+        Assert.True(entry.IsMedia);
+        Assert.Equal(FileCategory.Media, FileTypeClassifier.Classify(entry));
+    }
+
+    [Fact]
+    public void AFolderIsNeverTemporaryOrMedia()
+    {
+        var folder = new FileEntry { Name = "old.bak", IsDirectory = true, Attributes = FileAttributes.Directory };
+        var images = new FileEntry { Name = "shots.png", IsDirectory = true, Attributes = FileAttributes.Directory };
+
+        Assert.False(folder.IsTemporary);
+        Assert.False(images.IsMedia);
     }
 
     [Fact]

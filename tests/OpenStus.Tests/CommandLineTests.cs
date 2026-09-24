@@ -651,6 +651,169 @@ public class CommandLineHistoryTests
     }
 }
 
+/// <summary>
+/// Selecting text on the command line. Shift and the arrows only select while the panels are hidden
+/// (Ctrl+O), which the shell signals with <c>selectWithShift</c>; otherwise they stay the panel's.
+/// </summary>
+public class CommandLineSelectionTests
+{
+    private static (CommandLine Line, RecordingContext Ctx, MemoryClipboard Clipboard) New(string typed)
+    {
+        var ctx = new RecordingContext();
+        var clipboard = new MemoryClipboard();
+        var line = new CommandLine(ctx.Theme, new CommandHistory()) { Clipboard = clipboard };
+        Keys.Type(line, ctx, typed);
+        return (line, ctx, clipboard);
+    }
+
+    private static bool Hidden(CommandLine line, RecordingContext ctx, ConsoleKey key, KeyMods mods) =>
+        line.HandleKey(Keys.Key(key, mods), ctx, selectWithShift: true);
+
+    [Fact]
+    public void ShiftLeftSelectsWhileThePanelsAreHidden()
+    {
+        (CommandLine line, RecordingContext ctx, _) = New("copy a.txt b.txt");
+
+        for (int i = 0; i < 5; i++)
+        {
+            Assert.True(Hidden(line, ctx, ConsoleKey.LeftArrow, KeyMods.Shift));
+        }
+
+        Assert.True(line.HasSelection);
+        Assert.Equal("b.txt", line.SelectedText);
+        Assert.Equal(11, line.Caret);
+        Assert.Equal("copy a.txt b.txt", line.Text);
+    }
+
+    [Fact]
+    public void WithThePanelsUpShiftLeftStillGoesToThePanel()
+    {
+        (CommandLine line, RecordingContext ctx, _) = New("copy a.txt");
+
+        Assert.False(line.HandleKey(Keys.Key(ConsoleKey.LeftArrow, KeyMods.Shift), ctx));
+        Assert.False(line.HasSelection);
+    }
+
+    [Fact]
+    public void ShiftRightShiftHomeAndShiftEndExtendFromTheSameAnchor()
+    {
+        (CommandLine line, RecordingContext ctx, _) = New("dir /s");
+        line.HandleKey(Keys.Key(ConsoleKey.Home), ctx);
+
+        Hidden(line, ctx, ConsoleKey.RightArrow, KeyMods.Shift);
+        Hidden(line, ctx, ConsoleKey.RightArrow, KeyMods.Shift);
+        Assert.Equal("di", line.SelectedText);
+
+        Hidden(line, ctx, ConsoleKey.End, KeyMods.Shift);
+        Assert.Equal("dir /s", line.SelectedText);
+
+        Hidden(line, ctx, ConsoleKey.Home, KeyMods.Shift);
+        Assert.False(line.HasSelection); // back at the anchor: nothing between
+    }
+
+    [Fact]
+    public void CtrlShiftArrowsSelectWholeWords()
+    {
+        (CommandLine line, RecordingContext ctx, _) = New("git commit --amend");
+
+        Hidden(line, ctx, ConsoleKey.LeftArrow, KeyMods.Ctrl | KeyMods.Shift);
+        Assert.Equal("--amend", line.SelectedText);
+    }
+
+    [Fact]
+    public void TypingReplacesTheSelection()
+    {
+        (CommandLine line, RecordingContext ctx, _) = New("type old.txt");
+        for (int i = 0; i < 7; i++)
+        {
+            Hidden(line, ctx, ConsoleKey.LeftArrow, KeyMods.Shift);
+        }
+
+        Keys.Type(line, ctx, "new.md");
+
+        Assert.Equal("type new.md", line.Text);
+        Assert.False(line.HasSelection);
+    }
+
+    [Fact]
+    public void BackspaceAndDeleteRemoveTheSelection()
+    {
+        (CommandLine line, RecordingContext ctx, _) = New("echo hello");
+        Hidden(line, ctx, ConsoleKey.Home, KeyMods.Shift);
+
+        Assert.True(line.HandleKey(Keys.Key(ConsoleKey.Backspace), ctx));
+        Assert.Equal(string.Empty, line.Text);
+
+        Keys.Type(line, ctx, "echo hello");
+        line.HandleKey(Keys.Key(ConsoleKey.Home), ctx);
+        for (int i = 0; i < 5; i++)
+        {
+            Hidden(line, ctx, ConsoleKey.RightArrow, KeyMods.Shift);
+        }
+
+        Assert.True(line.HandleKey(Keys.Key(ConsoleKey.Delete), ctx));
+        Assert.Equal("hello", line.Text);
+        Assert.Equal(0, line.Caret);
+    }
+
+    [Fact]
+    public void CtrlCAndCtrlInsCopyAndShiftDelCuts()
+    {
+        (CommandLine line, RecordingContext ctx, MemoryClipboard clipboard) = New("ping example.org");
+        Hidden(line, ctx, ConsoleKey.LeftArrow, KeyMods.Ctrl | KeyMods.Shift);
+        Assert.Equal("org", line.SelectedText);
+
+        Assert.True(line.HandleKey(Keys.Key(ConsoleKey.C, KeyMods.Ctrl), ctx));
+        Assert.Equal("org", clipboard.GetText());
+        Assert.Equal("ping example.org", line.Text);
+
+        clipboard.SetText(string.Empty);
+        Assert.True(line.HandleKey(Keys.Key(ConsoleKey.Insert, KeyMods.Ctrl), ctx));
+        Assert.Equal("org", clipboard.GetText());
+
+        clipboard.SetText(string.Empty);
+        Assert.True(line.HandleKey(Keys.Key(ConsoleKey.Delete, KeyMods.Shift), ctx));
+        Assert.Equal("org", clipboard.GetText());
+        Assert.Equal("ping example.", line.Text);
+    }
+
+    [Fact]
+    public void CtrlASelectsTheWholeLineWhileThePanelsAreHidden()
+    {
+        (CommandLine line, RecordingContext ctx, _) = New("cls");
+
+        Assert.True(Hidden(line, ctx, ConsoleKey.A, KeyMods.Ctrl));
+        Assert.Equal("cls", line.SelectedText);
+    }
+
+    [Fact]
+    public void AnUnshiftedMoveDropsTheSelection()
+    {
+        (CommandLine line, RecordingContext ctx, _) = New("abc");
+        Hidden(line, ctx, ConsoleKey.LeftArrow, KeyMods.Shift);
+        Assert.True(line.HasSelection);
+
+        line.HandleKey(Keys.Key(ConsoleKey.LeftArrow), ctx);
+        Assert.False(line.HasSelection);
+    }
+
+    [Fact]
+    public void TheSelectionIsDrawnInTheSelectedColour()
+    {
+        (CommandLine line, RecordingContext ctx, _) = New("abcd");
+        Hidden(line, ctx, ConsoleKey.LeftArrow, KeyMods.Shift);
+        Hidden(line, ctx, ConsoleKey.LeftArrow, KeyMods.Shift);
+
+        var buffer = new ScreenBuffer(40, 1);
+        line.Draw(buffer, 0, "C:\\");
+
+        int textStart = "C:\\>".Length;
+        Assert.NotEqual(ctx.Theme.CommandLineSelected, buffer.Get(textStart + 1, 0).Style);
+        Assert.Equal(ctx.Theme.CommandLineSelected, buffer.Get(textStart + 2, 0).Style);
+        Assert.Equal(ctx.Theme.CommandLineSelected, buffer.Get(textStart + 3, 0).Style);
+    }
+}
+
 public class CommandLinePasteTests
 {
     private static (CommandLine Line, RecordingContext Ctx, MemoryClipboard Clipboard) New()

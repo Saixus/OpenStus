@@ -278,8 +278,8 @@ generated from `HelpScreen.Bindings`, so they cannot drift apart.
 | `Left / Right` | Move one column, or edit the command line |
 | `PgUp / PgDn` | Scroll one page |
 | `Home / End` | First / last item |
-| `Enter` | Enter a folder, or run the file under the cursor |
-| `Ctrl+PgDn` | Enter the folder under the cursor |
+| `Enter` | Enter a folder or an archive, or run the file under the cursor |
+| `Ctrl+PgDn` | Enter the folder or archive under the cursor |
 | `Ctrl+PgUp` | Go to the parent folder |
 | `Ctrl+\` | Go to the root of the current drive |
 | `Tab` | Switch the active panel |
@@ -290,7 +290,7 @@ generated from `HelpScreen.Bindings`, so they cannot drift apart.
 | `Ctrl+F1 / Ctrl+F2` | Hide or show the left / right panel |
 | `Ctrl+H` | Show or hide hidden and system files |
 | `Ctrl+B` | Show or hide the function key bar |
-| `Alt+F1 / Alt+F2` | Change the drive of the left / right panel |
+| `Alt+F1 / Alt+F2` | Change the drive of the left / right panel; the other panel's folder when it is on that drive |
 | `Alt+<letter>` | Quick search by name |
 | `Ctrl+T` | Open a new tab on the current folder |
 | `Ctrl+W` | Close the current tab |
@@ -388,6 +388,7 @@ generated from `HelpScreen.Bindings`, so they cannot drift apart.
 | `Shift+arrows` | Select text |
 | `Ctrl+Y` | Delete the current line |
 | `F2` | Save |
+| `F5` | Switch syntax colouring off or on |
 | `F7` | Search |
 | `Shift+F7` | Search again |
 | `F10 / Esc` | Close the editor |
@@ -406,6 +407,8 @@ generated from `HelpScreen.Bindings`, so they cannot drift apart.
 | `Right / End` | Accept the grey suggestion after the caret |
 | `Tab` | Complete the file name under the caret; a list when several match |
 | `Ctrl+Left / Ctrl+Right` | Move one word |
+| `Shift+Left / Shift+Right` | Select text while the panels are hidden (Ctrl+O); Shift+Home / End and Ctrl+Shift+arrows too |
+| `Ctrl+C / Ctrl+Ins` | Copy the selected text; Shift+Del cuts it |
 | `Ctrl+Backspace / Ctrl+Del` | Delete one word |
 | `Ctrl+Enter / Ctrl+J` | Insert the name under the cursor |
 | `Ctrl+F` | Insert the full name under the cursor |
@@ -463,6 +466,7 @@ src/OpenStus/
   Input/        KeyEvent, MouseEvent and the Windows / portable input backends
   Theming/      the Theme palette and its JSON serialisation
   Files/        FileEntry, directory reading, sorting, masks, size formatting, drives
+  Archives/     reading and extracting zip and tar archives the panels walk into
   Panels/       FilePanel, the view modes, the column layout, quick search, folder history
   Ui/           dialogs, controls, popup and horizontal menus, key bar, command line, clock, help
   Viewer/       the F3 file viewer and its lazily indexed model
@@ -502,8 +506,9 @@ the only type that wires the whole thing together.
 
 ## Roadmap
 
-- **Archives** — browse a `.zip` or `.7z` as if it were a folder, plus <kbd>Shift</kbd>+<kbd>F1</kbd>
-  and <kbd>Shift</kbd>+<kbd>F2</kbd> to add and extract.
+- **Archives** — `.7z` and `.rar` browsing, and writing into archives: <kbd>Shift</kbd>+<kbd>F1</kbd>
+  and <kbd>Shift</kbd>+<kbd>F2</kbd> to add and extract. Zip and tar archives can already be browsed,
+  viewed and copied out of.
 - **Plugins** — a real plugin surface behind <kbd>F11</kbd>, so a panel can be backed by something
   other than the file system.
 - **Tree panel** and **quick view** (<kbd>Ctrl</kbd>+<kbd>Q</kbd>).

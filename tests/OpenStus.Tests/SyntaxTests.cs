@@ -435,6 +435,58 @@ public class SyntaxTokenizerTests
         Assert.Null(SyntaxRegistry.ForPath("noextension"));
         Assert.Null(SyntaxRegistry.ForPath(null));
         Assert.Null(SyntaxRegistry.ForPath(string.Empty));
+
+        // The editor's fallback: a type nothing claims is still read as plain text.
+        Assert.Same(SyntaxRegistry.PlainText, SyntaxRegistry.ForPathOrPlainText("readme.txt"));
+        Assert.Same(SyntaxRegistry.PlainText, SyntaxRegistry.ForPathOrPlainText("noextension"));
+        Assert.NotSame(SyntaxRegistry.PlainText, SyntaxRegistry.ForPathOrPlainText("a.cs"));
+    }
+
+    [Fact]
+    public void PlainTextColoursNumbersThatStandOnTheirOwn()
+    {
+        const string Line = "2026-05-09 12:30:45 retry 3 of 5 from 192.168.0.10 build v2 x86 5px 0x1F.";
+        List<TokenSpan> tokens = Tokens(Line, SyntaxRegistry.PlainText);
+        List<string> numbers = [.. tokens.Where(t => t.Kind == TokenKind.Number).Select(t => Slice(Line, t))];
+
+        Assert.Equal(["2026-05-09", "12:30:45", "3", "5", "192.168.0.10", "0x1F"], numbers);
+    }
+
+    [Fact]
+    public void PlainTextColoursClosedStringsUrlsAndWellKnownWords()
+    {
+        const string Line = "ERROR: \"disk full\" at https://example.com/x, don't retry; value=true";
+        List<TokenSpan> tokens = Tokens(Line, SyntaxRegistry.PlainText);
+
+        Assert.Contains(tokens, t => t.Kind == TokenKind.Keyword && Slice(Line, t) == "ERROR");
+        Assert.Contains(tokens, t => t.Kind == TokenKind.String && Slice(Line, t) == "\"disk full\"");
+        Assert.Contains(tokens, t => t.Kind == TokenKind.String && Slice(Line, t) == "https://example.com/x");
+        Assert.Contains(tokens, t => t.Kind == TokenKind.Keyword && Slice(Line, t) == "true");
+
+        // The apostrophe in "don't" opens nothing, and nothing is left open for the next line.
+        Assert.Equal(2, tokens.Count(t => t.Kind != TokenKind.Keyword));
+        Assert.Equal(SyntaxMode.None, SyntaxTokenizer.ScanLine(Line, SyntaxRegistry.PlainText, default).Mode);
+    }
+
+    [Theory]
+    [InlineData("# a comment line")]
+    [InlineData("   ; an ini comment")]
+    [InlineData("// a slash comment")]
+    public void PlainTextCommentLinesAreComments(string line)
+    {
+        TokenSpan span = Assert.Single(Tokens(line, SyntaxRegistry.PlainText));
+        Assert.Equal(TokenKind.Comment, span.Kind);
+        Assert.Equal(line.TrimStart(), Slice(line, span));
+    }
+
+    [Fact]
+    public void PlainTextSectionHeadersAreKeywords()
+    {
+        TokenSpan span = Assert.Single(Tokens("[Settings]", SyntaxRegistry.PlainText));
+        Assert.Equal(TokenKind.Keyword, span.Kind);
+
+        // A bracket that is not the whole line is just text.
+        Assert.DoesNotContain(Tokens("[x] done", SyntaxRegistry.PlainText), t => t.Kind == TokenKind.Keyword);
     }
 
     [Fact]
@@ -521,28 +573,80 @@ public class SyntaxDrawingTests
         var screen = new ScreenBuffer(60, 10);
         editor.Draw(screen);
 
-        // Cell (0,0) carries the inverted caret, so the spans are asserted next to it.
-        Assert.Equal(theme.SyntaxKeyword, screen.Get(1, 0).Style);   // 'return'
+        Assert.Equal(theme.SyntaxKeyword, screen.Get(0, 0).Style);   // 'return', under the caret too
+        Assert.Equal(theme.SyntaxKeyword, screen.Get(1, 0).Style);
         Assert.Equal(theme.SyntaxString, screen.Get(8, 0).Style);    // '"text"'
         Assert.Equal(theme.SyntaxComment, screen.Get(16, 0).Style);  // '// note'
         Assert.Equal(theme.EditorText, screen.Get(6, 0).Style);      // the space between
     }
 
     [Fact]
-    public void TheEditorDrawsPlainWhenHighlightingIsOffOrTheTypeIsUnknown()
+    public void TheEditorDrawsPlainWhenHighlightingIsOff()
     {
         var theme = Theme.Classic();
         var screen = new ScreenBuffer(60, 10);
 
-        // Column 1: cell (0,0) carries the inverted caret.
         FileEditor off = Editor(theme, @"C:\demo\sample.cs", "return 1;");
         off.SyntaxHighlight = false;
         off.Draw(screen);
         Assert.Equal(theme.EditorText, screen.Get(1, 0).Style);
+        Assert.Equal(theme.EditorText, screen.Get(7, 0).Style);
+    }
 
+    [Fact]
+    public void TheEditorColoursNumbersInAFileOfUnknownType()
+    {
+        var theme = Theme.Classic();
+        var screen = new ScreenBuffer(60, 10);
+
+        // No language claims .txt: its words stay plain, its numbers do not.
         FileEditor unknown = Editor(theme, @"C:\demo\notes.txt", "return 1;");
         unknown.Draw(screen);
         Assert.Equal(theme.EditorText, screen.Get(1, 0).Style);
+        Assert.Equal(theme.SyntaxNumber, screen.Get(7, 0).Style);
+    }
+
+    [Fact]
+    public void F5SwitchesTheColouringAndTheKeyBarSaysWhichWay()
+    {
+        var theme = Theme.Classic();
+        FileEditor editor = Editor(theme, @"C:\demo\server.log", "retry 3 of 5");
+
+        Assert.Equal("Plain", editor.KeyBarFor(KeyMods.None)![4]);
+
+        Assert.True(editor.HandleInput(InputEvent.FromKey(new KeyEvent(ConsoleKey.F5, '\0', KeyMods.None))));
+        Assert.False(editor.SyntaxHighlight);
+        Assert.Equal("Colour", editor.KeyBarFor(KeyMods.None)![4]);
+
+        var screen = new ScreenBuffer(60, 10);
+        editor.Draw(screen);
+        Assert.Equal(theme.EditorText, screen.Get(6, 0).Style); // '3', plain now
+
+        editor.HandleInput(InputEvent.FromKey(new KeyEvent(ConsoleKey.F5, '\0', KeyMods.None)));
+        editor.Draw(screen);
+        Assert.Equal(theme.SyntaxNumber, screen.Get(6, 0).Style);
+    }
+
+    /// <summary>
+    /// The caret is the terminal's own blinking cursor - a bar while inserting, a block while
+    /// overwriting - and nothing is painted into the cell under it.
+    /// </summary>
+    [Fact]
+    public void TheCaretIsTheTerminalCursorAndLeavesTheCellAlone()
+    {
+        var theme = Theme.Classic();
+        FileEditor editor = Editor(theme, @"C:\demo\notes.txt", "abc");
+
+        var screen = new ScreenBuffer(60, 10);
+        editor.Draw(screen);
+
+        Assert.Equal(theme.EditorText, screen.Get(0, 0).Style);
+        Assert.Equal((0, 0), (editor.CursorScreenX, editor.CursorScreenY));
+        Assert.True(editor.CursorVisible);
+        Assert.Equal(CursorShape.BlinkingBar, editor.CursorShape);
+
+        editor.HandleInput(InputEvent.FromKey(new KeyEvent(ConsoleKey.Insert, '\0', KeyMods.None)));
+        Assert.Equal(CursorShape.BlinkingBlock, editor.CursorShape);
     }
 
     [Fact]

@@ -142,7 +142,8 @@ public sealed class FileEditor : IScreenComponent
 
     /// <summary>
     /// Colour the text by the file type's syntax (C#, JSON, SQL, ...). On by default; a file whose
-    /// extension no rules cover is simply drawn plain.
+    /// extension no language claims still gets its numbers, strings and comment lines coloured.
+    /// F5 switches it for the file being edited.
     /// </summary>
     public bool SyntaxHighlight { get; set; } = true;
 
@@ -151,6 +152,15 @@ public sealed class FileEditor : IScreenComponent
 
     /// <summary>The screen row the hardware caret should be placed at.</summary>
     public int CursorScreenY { get; private set; }
+
+    /// <summary>Whether the caret is inside the text area, so the hardware cursor should be shown.</summary>
+    public bool CursorVisible { get; private set; } = true;
+
+    /// <summary>
+    /// The shape the hardware caret takes: the console's blinking bar while typing inserts, a
+    /// blinking block while it overwrites - so the Insert key's state can be seen at the caret.
+    /// </summary>
+    public CursorShape CursorShape => Overwrite ? CursorShape.BlinkingBlock : CursorShape.BlinkingBar;
 
     /// <summary>The index of the top visible line.</summary>
     public int TopLine => _topLine;
@@ -167,7 +177,7 @@ public sealed class FileEditor : IScreenComponent
         KeyMods.Shift => BaseKeyBar.WithLabel(1, "SaveAs").WithLabel(6, "Next"),
         KeyMods.Ctrl => BaseKeyBar.WithLabel(6, "Replac"),
         KeyMods.Alt => BaseKeyBar.WithLabel(7, "GoTo"),
-        _ => BaseKeyBar,
+        _ => BaseKeyBar.WithLabel(4, SyntaxHighlight ? "Plain" : "Colour"),
     };
 
     /// <inheritdoc/>
@@ -192,7 +202,7 @@ public sealed class FileEditor : IScreenComponent
         }
 
         DrawScrollBar(buffer, rows);
-        DrawCaret(buffer, rows, width);
+        PlaceCaret(rows, width);
 
         if (_area.Height >= 2)
         {
@@ -351,6 +361,10 @@ public sealed class FileEditor : IScreenComponent
 
             case ConsoleKey.F2 when key.Mods == KeyMods.Shift:
                 SaveAs();
+                return true;
+
+            case ConsoleKey.F5 when key.Mods == KeyMods.None:
+                SyntaxHighlight = !SyntaxHighlight;
                 return true;
 
             case ConsoleKey.F7 when key.Mods == KeyMods.None:
@@ -980,7 +994,7 @@ public sealed class FileEditor : IScreenComponent
         if (!string.Equals(_syntaxPath, FilePath, StringComparison.Ordinal))
         {
             _syntaxPath = FilePath;
-            _syntaxRules = SyntaxRegistry.ForPath(FilePath);
+            _syntaxRules = SyntaxRegistry.ForPathOrPlainText(FilePath);
             _lineStates = new LineStateCache();
         }
 
@@ -1019,25 +1033,20 @@ public sealed class FileEditor : IScreenComponent
         }
     }
 
-    private void DrawCaret(ScreenBuffer buffer, int rows, int width)
+    /// <summary>
+    /// Works out where the hardware caret goes. Nothing is painted: the caret is the terminal's own
+    /// blinking cursor, which the shell places and shapes from <see cref="CursorScreenX"/>,
+    /// <see cref="CursorScreenY"/> and <see cref="CursorShape"/>.
+    /// </summary>
+    private void PlaceCaret(int rows, int width)
     {
         int display = TextBuffer.ToDisplayColumn(_buffer.GetLine(_cursor.Line), _cursor.Column, _buffer.TabSize);
-        int x = _area.X + display - _leftColumn;
-        int y = _area.Y + _cursor.Line - _topLine;
 
-        CursorScreenX = x;
-        CursorScreenY = y;
-
-        if (display - _leftColumn < 0 || display - _leftColumn >= width ||
-            _cursor.Line - _topLine < 0 || _cursor.Line - _topLine >= rows)
-        {
-            return;
-        }
-
-        // The hardware caret is the host's job; inverting the cell keeps the caret visible in a
-        // screenshot and on a terminal that hides it.
-        var under = buffer.Get(x, y);
-        buffer.Set(x, y, under.Glyph, new CellStyle(under.Style.Bg, under.Style.Fg));
+        CursorScreenX = _area.X + display - _leftColumn;
+        CursorScreenY = _area.Y + _cursor.Line - _topLine;
+        CursorVisible =
+            display - _leftColumn >= 0 && display - _leftColumn < width &&
+            _cursor.Line - _topLine >= 0 && _cursor.Line - _topLine < rows;
     }
 
     private void DrawStatus(ScreenBuffer buffer, int row)
