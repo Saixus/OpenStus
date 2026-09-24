@@ -1,4 +1,8 @@
+<img src="docs/icon.svg" width="72" height="72" align="left" alt="">
+
 # Open Stus
+
+<br clear="left">
 
 Open Stus is an open source, cross-platform dual-pane console file manager written in C# on .NET 10:
 an open source alternative to Far Manager, Midnight Commander and the other orthodox file managers.
