@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Open Stus">
+  <title>Open Stus</title>
+  <!-- Two framed panels of file rows, in the blue and yellow of the Ukrainian flag. -->
+  <rect width="32" height="32" rx="4" fill="#0B1220"/>
+  <rect x="4" y="6" width="10" height="20" fill="none" stroke="#0057B7" stroke-width="1.5"/>
+  <rect x="6" y="10.5" width="6" height="1.5" fill="#FFD700"/>
+  <rect x="6" y="14.5" width="6" height="1.5" fill="#FFD700"/>
+  <rect x="6" y="18.5" width="6" height="1.5" fill="#FFD700"/>
+  <rect x="18" y="6" width="10" height="20" fill="none" stroke="#0057B7" stroke-width="1.5"/>
+  <rect x="20" y="10.5" width="6" height="1.5" fill="#FFD700"/>
+  <rect x="20" y="14.5" width="6" height="1.5" fill="#FFD700"/>
+  <rect x="20" y="18.5" width="6" height="1.5" fill="#FFD700"/>
+</svg>
