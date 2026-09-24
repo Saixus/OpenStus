@@ -21,6 +21,9 @@ publish/
 *.userprefs
 *.sln.docstates
 *.DotSettings.user
+# Publish profiles are normally shared, but this project publishes from the command line - see
+# the README - so one written by an IDE is a local artifact rather than something to commit.
+**/Properties/PublishProfiles/
 
 # Test / coverage results
 [Tt]est[Rr]esult*/
