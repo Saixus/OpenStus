@@ -8,6 +8,14 @@ All notable changes to Open Stus are recorded here. The format follows
 
 ### Added
 
+- **Shift+Enter opens outside Open Stus.** On a folder it opens the system file manager there
+  (Explorer on Windows, the desktop's own elsewhere) - on `..` the folder the panel shows; on a file
+  it starts the file with its associated program and comes straight back. Inside an archive a file
+  is taken out first, and a folder opens the archive file itself.
+
+- **A click on the sort letter changes the drive.** The letter in the top-left corner of a panel's
+  column titles (`n` for by name) opens that panel's drive menu, as `Alt+F1` / `Alt+F2` do.
+
 - **Archives open in the panel.** Enter (or `Ctrl+PgDn`) on a zip - and its relatives jar, war,
   nupkg, vsix, whl, apk - a tar, a `.tar.gz` / `.tgz` or a lone `.gz` walks into it as if it were a
   folder: the title and the prompt show `...\tools.zip\bin`, `..` climbs back out onto the archive,
@@ -177,6 +185,14 @@ the four reported issues at the top of this list.
 
 ### Changed
 
+- **Enter no longer waits for Word or Excel.** A document, or a program with a window of its own,
+  is handed to the system and the panels come straight back, instead of the console sitting
+  locked until the program is closed. Console programs, batch files and documents a console
+  program opens (a `.py` run by `py.exe`) still run on the user screen as before. On Windows the
+  choice comes from the subsystem in the program's header; elsewhere a file without the execute
+  bit goes to `xdg-open` / `open` rather than failing in the shell.
+- **Only a click moves the focus between panels.** The pointer passing over the other panel no
+  longer makes it the active one; the wheel scrolls whichever panel it is over, focus or not.
 - **The drive menu lines the panels up.** Picking, with `Alt+F1` / `Alt+F2`, the drive the other
   panel is on opens the other panel's folder rather than the drive's root.
 - **The editor's caret is the console's own cursor.** It is no longer an inverted cell drawn into

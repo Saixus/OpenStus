@@ -949,9 +949,18 @@ public sealed class Application : IAppContext, IDisposable
             return;
         }
 
-        if (!target.IsActive)
+        // Only a click hands the focus over. The pointer drifting across the other panel - or the
+        // wheel turning above it, which scrolls it - leaves the focus where it is.
+        if (!target.IsActive && mouse.IsPress)
         {
             SetActivePanel(target);
+        }
+
+        // The sort letter in the top-left corner doubles as the panel's drive button.
+        if (mouse.IsPress && mouse.Button == MouseButton.Left && target.IsDriveButtonAt(mouse.X, mouse.Y))
+        {
+            ShowDriveMenu(left: target == _left);
+            return;
         }
 
         target.HandleMouse(mouse, this);
@@ -1063,6 +1072,29 @@ public sealed class Application : IAppContext, IDisposable
         }
 
         Terminal.Invalidate();
+        _dirty = true;
+    }
+
+    /// <inheritdoc/>
+    public void RunFile(string path)
+    {
+        if (CommandExecutor.RunsInConsole(path))
+        {
+            RunShellCommand("\"" + path + "\"");
+            return;
+        }
+
+        OpenExternally(path);
+    }
+
+    /// <inheritdoc/>
+    public void OpenExternally(string path)
+    {
+        if (!CommandExecutor.Open(path, ActiveFilePanel.WorkingDirectory, Terminal, out string? error))
+        {
+            _ui.Error("Open", Shorten(path, 60) + "\n" + (error ?? "The system could not open it."));
+        }
+
         _dirty = true;
     }
 

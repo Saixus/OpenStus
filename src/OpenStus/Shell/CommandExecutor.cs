@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using OpenStus.Files;
 using OpenStus.Rendering;
 
@@ -300,47 +301,233 @@ public static class CommandExecutor
     }
 
     /// <summary>
-    /// Opens a file or folder with the association the operating system has for it.
+    /// Whether running a file needs the console: a console program, a batch file, or a document
+    /// whose associated program is a console program (a <c>.py</c> opened by <c>py.exe</c>).
     /// </summary>
-    /// <param name="path">The file or folder to open.</param>
-    /// <param name="workingDirectory">The directory the launched process starts in.</param>
+    /// <param name="path">The file Enter was pressed on.</param>
+    /// <returns>
+    /// <see langword="true"/> when the file should run on the user screen like a typed command,
+    /// which waits for it; <see langword="false"/> when it is a windowed program or a document
+    /// that opens in one, which <see cref="Open"/> starts without waiting.
+    /// </returns>
     /// <remarks>
-    /// Never throws: an unassociated file type, a missing helper or a refused launch simply does
-    /// nothing, because there is no useful way for a panel to recover from it.
+    /// On Windows the answer comes from the subsystem field of the program's header - the program
+    /// itself for an <c>.exe</c>, the associated program for a document. An unreadable program is
+    /// taken to be a console one, which is the old, safe behaviour; a document with no association
+    /// goes to the system, which asks what to open it with. Elsewhere a file with an execute bit
+    /// runs in the terminal and anything else goes to the desktop's opener.
     /// </remarks>
-    public static void Launch(string path, string workingDirectory)
+    public static bool RunsInConsole(string path)
     {
         if (string.IsNullOrWhiteSpace(path))
         {
-            return;
+            return false;
+        }
+
+        if (!OperatingSystem.IsWindows())
+        {
+            try
+            {
+                const UnixFileMode Execute = UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute;
+                return (File.GetUnixFileMode(path) & Execute) != 0;
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException)
+            {
+                return true;
+            }
+        }
+
+        string extension = Path.GetExtension(path);
+        if (extension.Equals(".bat", StringComparison.OrdinalIgnoreCase) ||
+            extension.Equals(".cmd", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (extension.Equals(".exe", StringComparison.OrdinalIgnoreCase) ||
+            extension.Equals(".com", StringComparison.OrdinalIgnoreCase))
+        {
+            return IsConsoleProgram(path) ?? true;
+        }
+
+        string? program = AssociatedProgram(extension);
+        return program is not null && IsConsoleProgram(program) == true;
+    }
+
+    /// <summary>
+    /// Reads the subsystem a Windows program was built for from its PE header.
+    /// </summary>
+    /// <param name="path">The program file.</param>
+    /// <returns>
+    /// <see langword="true"/> for a console program, <see langword="false"/> for a windowed one,
+    /// and <see langword="null"/> when the file cannot be read or is not a PE image.
+    /// </returns>
+    public static bool? IsConsoleProgram(string path)
+    {
+        const ushort WindowsGui = 2;
+        const ushort WindowsConsole = 3;
+
+        try
+        {
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var reader = new BinaryReader(stream);
+
+            // "MZ", then the offset of the "PE\0\0" signature at 0x3C.
+            if (stream.Length < 0x40 || reader.ReadUInt16() != 0x5A4D)
+            {
+                return null;
+            }
+
+            stream.Position = 0x3C;
+            long signature = reader.ReadUInt32();
+
+            // The subsystem sits 68 bytes into the optional header, which follows the four-byte
+            // signature and the 20-byte file header - at the same offset for 32 and 64 bit images.
+            long subsystemAt = signature + 4 + 20 + 68;
+            if (subsystemAt + 2 > stream.Length)
+            {
+                return null;
+            }
+
+            stream.Position = signature;
+            if (reader.ReadUInt32() != 0x00004550)
+            {
+                return null;
+            }
+
+            stream.Position = subsystemAt;
+            return reader.ReadUInt16() switch
+            {
+                WindowsConsole => true,
+                WindowsGui => false,
+                _ => null,
+            };
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            // Among others, the zero-byte app execution aliases in WindowsApps cannot be opened.
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Hands a file or folder to the operating system and returns at once, without waiting for
+    /// whatever it starts: a folder opens in the system file manager, a file with its associated
+    /// program - Word for a <c>.docx</c>, its own window for a program.
+    /// </summary>
+    /// <param name="path">The file or folder to open.</param>
+    /// <param name="workingDirectory">The directory the launched process starts in.</param>
+    /// <param name="terminal">The terminal; nothing is started while it is headless.</param>
+    /// <param name="error">Why the launch failed, or <see langword="null"/>.</param>
+    /// <returns>
+    /// <see langword="false"/> only when the launch failed for a reason worth telling the user;
+    /// cancelling the system's own "open with" dialog is not one.
+    /// </returns>
+    public static bool Open(string path, string? workingDirectory, Terminal terminal, out string? error)
+    {
+        ArgumentNullException.ThrowIfNull(terminal);
+
+        error = null;
+
+        // Headless is screenshot mode and the tests: nothing on the desktop should start.
+        if (string.IsNullOrWhiteSpace(path) || terminal.IsHeadless)
+        {
+            return true;
         }
 
         try
         {
-            ProcessStartInfo info;
-            if (OperatingSystem.IsWindows())
+            // The started program outlives the handle; disposing it does not end the program.
+            using Process? process = Process.Start(BuildOpenStartInfo(path, workingDirectory));
+            return true;
+        }
+        catch (System.ComponentModel.Win32Exception e) when (e.NativeErrorCode == ErrorCancelled)
+        {
+            return true;
+        }
+        catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException or PlatformNotSupportedException or IOException or UnauthorizedAccessException)
+        {
+            error = e.Message;
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Builds the start info <see cref="Open"/> uses.
+    /// </summary>
+    /// <param name="path">The file or folder to open.</param>
+    /// <param name="workingDirectory">The directory the launched process starts in.</param>
+    /// <returns>
+    /// On Windows, Explorer for a folder and the shell's own "open" for a file, its error and
+    /// "open with" dialogs allowed; elsewhere <c>xdg-open</c> (<c>open</c> on macOS) through
+    /// <c>/bin/sh</c>, cut off from the terminal so nothing it prints lands on the panels.
+    /// </returns>
+    public static ProcessStartInfo BuildOpenStartInfo(string path, string? workingDirectory)
+    {
+        ProcessStartInfo info;
+        if (OperatingSystem.IsWindows())
+        {
+            if (Directory.Exists(path))
             {
-                info = new ProcessStartInfo(path) { UseShellExecute = true };
+                string windows = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+                info = new ProcessStartInfo(windows.Length > 0 ? Path.Combine(windows, "explorer.exe") : "explorer.exe")
+                {
+                    UseShellExecute = false,
+                };
+                info.ArgumentList.Add(path);
             }
             else
             {
-                string opener = OperatingSystem.IsMacOS() ? "open" : "xdg-open";
-                info = new ProcessStartInfo(opener) { UseShellExecute = false };
-                info.ArgumentList.Add(path);
+                info = new ProcessStartInfo(path) { UseShellExecute = true, ErrorDialog = true };
             }
-
-            if (!string.IsNullOrWhiteSpace(workingDirectory))
-            {
-                info.WorkingDirectory = workingDirectory;
-            }
-
-            // The launched process outlives us; disposing the handle does not kill it.
-            using Process? process = Process.Start(info);
         }
-        catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException or PlatformNotSupportedException or ObjectDisposedException or IOException)
+        else
         {
-            // No association, no helper, or the user cancelled the shell's own dialog.
+            string opener = OperatingSystem.IsMacOS() ? "open" : "xdg-open";
+            info = new ProcessStartInfo("/bin/sh") { UseShellExecute = false };
+            info.ArgumentList.Add("-c");
+            info.ArgumentList.Add("exec \"$0\" \"$1\" </dev/null >/dev/null 2>&1");
+            info.ArgumentList.Add(opener);
+            info.ArgumentList.Add(path);
         }
+
+        if (!string.IsNullOrWhiteSpace(workingDirectory))
+        {
+            info.WorkingDirectory = workingDirectory;
+        }
+
+        return info;
+    }
+
+    /// <summary>
+    /// The program Windows opens files of an extension with, through <c>AssocQueryStringW</c>.
+    /// </summary>
+    /// <param name="extension">The extension, dot included.</param>
+    /// <returns>The program's full path, or <see langword="null"/> when there is no association.</returns>
+    private static string? AssociatedProgram(string extension)
+    {
+        if (extension.Length < 2)
+        {
+            return null;
+        }
+
+        var buffer = new char[1024];
+        uint length = (uint)buffer.Length;
+        int result = AssocQueryStringW(
+            AssocFlagNoTruncate | AssocFlagIgnoreUnknown,
+            AssocStrExecutable,
+            extension,
+            null,
+            buffer,
+            ref length);
+
+        if (result != 0 || length <= 1)
+        {
+            return null;
+        }
+
+        string program = new(buffer, 0, (int)length - 1);
+        return File.Exists(program) ? program : null;
     }
 
     /// <summary>
@@ -438,6 +625,21 @@ public static class CommandExecutor
             // Ignored.
         }
     }
+
+    /// <summary><c>ERROR_CANCELLED</c>: the user closed the shell's "open with" dialog.</summary>
+    private const int ErrorCancelled = 1223;
+
+    private const uint AssocFlagNoTruncate = 0x20;
+
+    /// <summary><c>ASSOCF_INIT_IGNOREUNKNOWN</c>: fail for an unassociated type instead of naming the "open with" helper.</summary>
+    private const uint AssocFlagIgnoreUnknown = 0x400;
+
+    private const uint AssocStrExecutable = 2;
+
+#pragma warning disable SYSLIB1054 // DllImport keeps the project free of <AllowUnsafeBlocks>, as elsewhere.
+    [DllImport("shlwapi.dll", CharSet = CharSet.Unicode, EntryPoint = "AssocQueryStringW", ExactSpelling = true)]
+    private static extern int AssocQueryStringW(uint flags, uint str, string assoc, string? extra, [Out] char[] output, ref uint outputLength);
+#pragma warning restore SYSLIB1054
 
     private static readonly char[] Whitespace = [' ', '\t'];
 

@@ -1303,6 +1303,9 @@ public sealed class FilePanel : IFilePanel
             case ConsoleKey.Enter when none:
                 Activate(app);
                 return true;
+            case ConsoleKey.Enter when shift:
+                OpenExternally(app);
+                return true;
             case ConsoleKey.Enter when ctrl:
                 InsertCurrentName(app);
                 return true;
@@ -1394,11 +1397,12 @@ public sealed class FilePanel : IFilePanel
 
     /// <inheritdoc/>
     /// <remarks>
-    /// A click in a panel that does not have the focus is <em>not</em> consumed: the method returns
-    /// <see langword="false"/> so the shell can make this panel active and, if it wants to, replay
-    /// the event. Everything else is handled here - the wheel scrolls the window without moving the
-    /// cursor, the left button moves the cursor (and activates the entry when it was already under
-    /// the cursor, or on a double click), and the right button toggles the tag and moves the cursor.
+    /// The wheel scrolls the window without moving the cursor, whether or not the panel has the
+    /// focus. A click in a panel that does not have the focus is <em>not</em> consumed: the method
+    /// returns <see langword="false"/> so the shell can make this panel active and replay the
+    /// event. Everything else is handled here - the left button moves the cursor (and activates
+    /// the entry when it was already under the cursor, or on a double click), and the right button
+    /// toggles the tag and moves the cursor.
     /// </remarks>
     public bool HandleMouse(MouseEvent m, IAppContext ctx)
     {
@@ -1407,15 +1411,15 @@ public sealed class FilePanel : IFilePanel
             return false;
         }
 
-        if (!IsActive)
-        {
-            return false;
-        }
-
         if (m.Kind == MouseKind.Wheel)
         {
             ScrollBy(-m.Wheel * WheelRows);
             return true;
+        }
+
+        if (!IsActive)
+        {
+            return false;
         }
 
         if (m.Kind is not (MouseKind.Down or MouseKind.DoubleClick))
@@ -1500,6 +1504,23 @@ public sealed class FilePanel : IFilePanel
 
         int index = _top + (stripe * rows) + row;
         return index >= 0 && index < _entries.Count ? index : -1;
+    }
+
+    /// <summary>
+    /// Whether a screen cell is the sort letter in the top-left corner of the column titles,
+    /// which a click turns into the drive menu.
+    /// </summary>
+    /// <param name="screenX">Screen column.</param>
+    /// <param name="screenY">Screen row.</param>
+    /// <returns><see langword="true"/> on that one cell of a drawn panel.</returns>
+    public bool IsDriveButtonAt(int screenX, int screenY)
+    {
+        Rect b = Bounds;
+        return IsVisible &&
+               b.Width >= MinWidth &&
+               b.Height >= RequiredHeight &&
+               screenX == b.X + 1 &&
+               screenY == b.Y + HeaderRows - 1;
     }
 
     /// <summary>Scrolls the window without moving the cursor, the way the wheel does.</summary>
@@ -1701,7 +1722,7 @@ public sealed class FilePanel : IFilePanel
                 return;
             }
 
-            app?.RunShellCommand("\"" + extracted + "\"");
+            app?.RunFile(extracted);
             return;
         }
 
@@ -1711,7 +1732,45 @@ public sealed class FilePanel : IFilePanel
             return;
         }
 
-        app?.RunShellCommand("\"" + current.FullPath + "\"");
+        app?.RunFile(current.FullPath);
+    }
+
+    /// <summary>
+    /// Shift+Enter: hands the entry under the cursor to the operating system without waiting - a
+    /// folder to the system file manager, a file (an archive included) to its associated program.
+    /// </summary>
+    /// <remarks>
+    /// <c>..</c> opens the folder the panel shows. Inside an archive a file is taken out to the
+    /// scratch area first, and a folder - which has no real path - opens the archive file itself.
+    /// </remarks>
+    private void OpenExternally(IAppContext? app)
+    {
+        FileEntry? current = Current;
+        if (app is null || current is null)
+        {
+            return;
+        }
+
+        if (_archiveFile is not null)
+        {
+            if (current.IsDirectory)
+            {
+                app.OpenExternally(_archiveFile);
+                return;
+            }
+
+            string? extracted = ExtractToTemp(current, out string? error);
+            if (extracted is null)
+            {
+                app.Ui.Error("Open", error ?? "The file could not be extracted.");
+                return;
+            }
+
+            app.OpenExternally(extracted);
+            return;
+        }
+
+        app.OpenExternally(current.IsParent ? CurrentPath : current.FullPath);
     }
 
     /// <summary>
