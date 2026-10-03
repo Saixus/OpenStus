@@ -44,6 +44,10 @@ internal sealed class RecordingContext : IAppContext
 
     public void RunShellCommand(string command) => Commands.Add(command);
 
+    public void RunFile(string path) => throw new NotSupportedException();
+
+    public void OpenExternally(string path) => throw new NotSupportedException();
+
     public void InsertIntoCommandLine(string text) => throw new NotSupportedException();
 }
 
@@ -1814,6 +1818,10 @@ public class CommandLineTabCompletionTests : IDisposable
         public void RunShellCommand(string command)
         {
         }
+
+        public void RunFile(string path) => throw new NotSupportedException();
+
+        public void OpenExternally(string path) => throw new NotSupportedException();
 
         public void InsertIntoCommandLine(string text) => throw new NotSupportedException();
     }

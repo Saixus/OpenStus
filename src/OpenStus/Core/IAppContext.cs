@@ -59,6 +59,21 @@ public interface IAppContext
     /// <param name="command">The command line, exactly as typed.</param>
     void RunShellCommand(string command);
 
+    /// <summary>
+    /// Runs a file the way Enter does: a console program or script runs on the user screen like a
+    /// typed command, while a document or a windowed program is handed to the operating system
+    /// and left running, so the panels come straight back instead of waiting for it to close.
+    /// </summary>
+    /// <param name="path">The file to run.</param>
+    void RunFile(string path);
+
+    /// <summary>
+    /// Hands a file or folder to the operating system without waiting (Shift+Enter): a folder
+    /// opens in the system file manager, a file with the program the system associates with it.
+    /// </summary>
+    /// <param name="path">The file or folder to open.</param>
+    void OpenExternally(string path);
+
     /// <summary>Inserts text at the command line caret (Ctrl+J, Ctrl+F, Ctrl+[ and friends).</summary>
     /// <param name="text">The text to insert.</param>
     void InsertIntoCommandLine(string text);

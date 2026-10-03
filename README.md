@@ -278,7 +278,8 @@ generated from `HelpScreen.Bindings`, so they cannot drift apart.
 | `Left / Right` | Move one column, or edit the command line |
 | `PgUp / PgDn` | Scroll one page |
 | `Home / End` | First / last item |
-| `Enter` | Enter a folder or an archive, or run the file under the cursor |
+| `Enter` | Enter a folder or an archive, or run the file; a document or windowed program opens without waiting |
+| `Shift+Enter` | Open the folder in the system file manager (on .. the folder shown), or the file with its program |
 | `Ctrl+PgDn` | Enter the folder or archive under the cursor |
 | `Ctrl+PgUp` | Go to the parent folder |
 | `Ctrl+\` | Go to the root of the current drive |
@@ -291,6 +292,7 @@ generated from `HelpScreen.Bindings`, so they cannot drift apart.
 | `Ctrl+H` | Show or hide hidden and system files |
 | `Ctrl+B` | Show or hide the function key bar |
 | `Alt+F1 / Alt+F2` | Change the drive of the left / right panel; the other panel's folder when it is on that drive |
+| `Click the sort letter` | Change that panel's drive; the sort letter is the top-left corner of the column titles |
 | `Alt+<letter>` | Quick search by name |
 | `Ctrl+T` | Open a new tab on the current folder |
 | `Ctrl+W` | Close the current tab |
